@@ -18,16 +18,16 @@ Environment::Environment() {
 	irradianceMap = new Texture();
 	prefilterMap = new Texture();
 
-	std::ifstream vertStream(std::string(PROJECT_SOURCE_DIR "./cubemap/cubemap_vert.glsl"));
+	std::ifstream vertStream(std::string(PROJECT_SOURCE_DIR "/shaders/model_vert.glsl"));
 	cubeVertSource = std::string(std::istreambuf_iterator<char>(vertStream), std::istreambuf_iterator<char>());
 
-	std::ifstream hdriStream(std::string(PROJECT_SOURCE_DIR "./cubemap/gen_from_hdri.glsl"));
+	std::ifstream hdriStream(std::string(PROJECT_SOURCE_DIR "/shaders/cubemap/gen_from_hdri.glsl"));
 	convertSource = std::string(std::istreambuf_iterator<char>(hdriStream), std::istreambuf_iterator<char>());
 
-	std::ifstream irrStream(std::string(PROJECT_SOURCE_DIR "./cubemap/irradiance_convolution.glsl"));
+	std::ifstream irrStream(std::string(PROJECT_SOURCE_DIR "/shaders/cubemap/irradiance_convolution.glsl"));
 	irradianceSource = std::string(std::istreambuf_iterator<char>(irrStream), std::istreambuf_iterator<char>());
 
-	std::ifstream prefilterStream(std::string(PROJECT_SOURCE_DIR "./cubemap/prefilter.glsl"));
+	std::ifstream prefilterStream(std::string(PROJECT_SOURCE_DIR "/shaders/cubemap/prefilter.glsl"));
 	prefilterSource = std::string(std::istreambuf_iterator<char>(prefilterStream), std::istreambuf_iterator<char>());
 
 	glGenFramebuffers(1, &fbo);

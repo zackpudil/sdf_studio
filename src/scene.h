@@ -70,8 +70,10 @@ private:
 	std::string uniformErrors;
 
 	std::string vertSource;
-	std::string fragSource;
+	std::string rendererSource;
+	std::string librarySource;
 	std::string brdfSource;
+
 	std::string shaderSource;
 
 	GLuint fbo, rbo;

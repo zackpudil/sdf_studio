@@ -52,7 +52,6 @@ void SceneUI::renderUniforms() {
 		switch (v.type) {
 		case UniformType::Int:
 			if (ImGui::CollapsingHeader(name)) {
-				ImGui::SliderInt(name, v.valuei, (int)v.min, (int)v.max);
 				ImGui::InputInt(name, v.valuei);
 			}
 			break;
@@ -145,10 +144,10 @@ void SceneUI::renderSceneChooser() {
 void SceneUI::renderCodeAndMaterials() {
 	ImGui::Begin("GLSL");
 
-	static char newMaterialName[25];
+	static char newMaterialName[25] = "";
 	if (ImGui::CollapsingHeader("Materials")) {
 		for (auto material : *scene->GetMaterials()) {
-			if (ImGui::CollapsingHeader(material.name.c_str())) {
+			if (ImGui::TreeNode(material.name.c_str())) {
 
 				ImGui::Image((void*)(intptr_t)material.albedo->TextureId, ImVec2(50, 50));
 				ImGui::SameLine();
@@ -166,6 +165,8 @@ void SceneUI::renderCodeAndMaterials() {
 				ImGui::SameLine();
 
 				ImGui::Image((void*)(intptr_t)material.height->TextureId, ImVec2(50, 50));
+
+				ImGui::TreePop();
 			}
 		}
 		ImGui::InputText("Name##material", newMaterialName, 25);
@@ -186,6 +187,12 @@ void SceneUI::renderCodeAndMaterials() {
 
 			SceneMaterial material;
 			material.name = std::string(newMaterialName);
+			material.albedo = new Texture();
+			material.roughness = new Texture();
+			material.metal = new Texture();
+			material.normal = new Texture();
+			material.ambientOcclusion = new Texture();
+			material.height = new Texture();
 
 			auto isType = [](std::string name, std::string type) {
 				std::string lowerName = name;
@@ -194,30 +201,12 @@ void SceneUI::renderCodeAndMaterials() {
 			};
 
 			for (auto const& file : files) {
-				if (isType(file.first, "albedo")) {
-					material.albedo = new Texture();
-					material.albedo->LoadFromFile2D(file.second);
-
-				} else if (isType(file.first, "roughness")) {
-					material.roughness = new Texture();
-					material.roughness->LoadFromFile2D(file.second);
-
-				} else if (isType(file.first, "metal")) {
-					material.metal = new Texture();
-					material.metal->LoadFromFile2D(file.second);
-
-				} else if (isType(file.first, "normal")) {
-					material.normal = new Texture();
-					material.normal->LoadFromFile2D(file.second);
-
-				} else if (isType(file.first, "ao")) {
-					material.ambientOcclusion = new Texture();
-					material.ambientOcclusion->LoadFromFile2D(file.second);
-
-				} else if (isType(file.first, "height")) {
-					material.height = new Texture();
-					material.height->LoadFromFile2D(file.second);
-				}
+				if (isType(file.first, "_albedo")) material.albedo->LoadFromFile2D(file.second);
+				else if (isType(file.first, "_rough")) material.roughness->LoadFromFile2D(file.second);
+				else if (isType(file.first, "_metal")) material.metal->LoadFromFile2D(file.second);
+				else if (isType(file.first, "_normal")) material.normal->LoadFromFile2D(file.second);
+				else if (isType(file.first, "_ao"))  material.ambientOcclusion->LoadFromFile2D(file.second);
+				else if (isType(file.first, "_height")) material.height->LoadFromFile2D(file.second);
 			}
 
 			scene->GetMaterials()->push_back(material);

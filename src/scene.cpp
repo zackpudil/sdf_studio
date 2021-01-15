@@ -12,13 +12,16 @@ Scene::Scene(Camera *c, Environment *e) : camera(c), environment(e) {
 
 	screen->PrepareQuad();
 
-	std::ifstream vertStream(std::string(PROJECT_SOURCE_DIR "./scene_vert.glsl"));
+	std::ifstream vertStream(std::string(PROJECT_SOURCE_DIR "/shaders/quad_vert.glsl"));
 	vertSource = std::string(std::istreambuf_iterator<char>(vertStream), std::istreambuf_iterator<char>());
 
-	std::ifstream fragStream(std::string(PROJECT_SOURCE_DIR "./scene_frag.glsl"));
-	fragSource = std::string(std::istreambuf_iterator<char>(fragStream), std::istreambuf_iterator<char>());
+	std::ifstream fragStream(std::string(PROJECT_SOURCE_DIR "/shaders/realtime_renderer.glsl"));
+	rendererSource = std::string(std::istreambuf_iterator<char>(fragStream), std::istreambuf_iterator<char>());
 
-	std::ifstream brdfStream(std::string(PROJECT_SOURCE_DIR "./brdf.glsl"));
+	std::ifstream hdfLibraryStream(std::string(PROJECT_SOURCE_DIR "/shaders/hg_sdf.glsl"));
+	librarySource = std::string(std::istreambuf_iterator<char>(hdfLibraryStream), std::istreambuf_iterator<char>());
+
+	std::ifstream brdfStream(std::string(PROJECT_SOURCE_DIR "/shaders/utils/precomputed_brdf.glsl"));
 	brdfSource = std::string(std::istreambuf_iterator<char>(brdfStream), std::istreambuf_iterator<char>());
 
 	glGenFramebuffers(1, &fbo);
@@ -51,8 +54,8 @@ void Scene::Render() {
 
 bool Scene::SetShader(std::string source) {
 	try {
-		std::ifstream fragStream(std::string(PROJECT_SOURCE_DIR "./scene_frag.glsl"));
-		fragSource = std::string(std::istreambuf_iterator<char>(fragStream), std::istreambuf_iterator<char>());
+		std::ifstream fragStream(std::string(PROJECT_SOURCE_DIR "/shaders/realtime_renderer.glsl"));
+		rendererSource = std::string(std::istreambuf_iterator<char>(fragStream), std::istreambuf_iterator<char>());
 
 		shaderSource = source;
 
@@ -68,9 +71,12 @@ bool Scene::SetShader(std::string source) {
 
 bool Scene::InitShader() {
 	try {
-		std::string code = fragSource;
+		std::string code = rendererSource;
 		auto start_pos = code.find("<<HERE>>");
 		code.replace(start_pos, 8, shaderSource);
+
+		start_pos = code.find("<<SDF_HELPERS>>");
+		code.replace(start_pos, 15, librarySource);
 
 		start_pos = code.find("<<TEXTURES>>");
 		code.replace(start_pos, 12, addMaterialsToCode());
@@ -156,12 +162,12 @@ void Scene::bindUniform(SceneUniform uniform) {
 }
 
 void Scene::bindMaterial(SceneMaterial texture) {
-	program->Bind(texture.name + ".albedo", texture.albedo->Use2D())
-		.Bind(texture.name + ".roughness", texture.roughness->Use2D())
-		.Bind(texture.name + ".metal", texture.metal->Use2D())
-		.Bind(texture.name + ".normal", texture.normal->Use2D())
-		.Bind(texture.name + ".ambientOcclusion", texture.ambientOcclusion->Use2D())
-		.Bind(texture.name + ".height", texture.height->Use2D());
+	if (texture.albedo->TextureId > 0) program->Bind(texture.name + ".albedo", texture.albedo->Use2D());
+	if (texture.roughness->TextureId > 0) program->Bind(texture.name + ".roughness", texture.roughness->Use2D());
+	if (texture.metal->TextureId > 0) program->Bind(texture.name + ".metal", texture.metal->Use2D());
+	if (texture.normal->TextureId > 0) program->Bind(texture.name + ".normal", texture.normal->Use2D());
+	if (texture.ambientOcclusion->TextureId > 0) program->Bind(texture.name + ".ambientOcclusion", texture.ambientOcclusion->Use2D());
+	if (texture.height->TextureId > 0) program->Bind(texture.name + ".height", texture.height->Use2D());
 }
 
 void Scene::getUniformsFromSource() {

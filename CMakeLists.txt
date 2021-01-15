@@ -13,7 +13,7 @@ file(GLOB_RECURSE SOURCES "${SOURCE_DIR}/*.cpp")
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
 target_include_directories(${PROJECT_NAME} PRIVATE "${SOURCE_DIR}")
 set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 11)
-add_definitions(-DPROJECT_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}/src\" "-w")
+add_definitions(-DPROJECT_SOURCE_DIR=\"${PROJECT_SOURCE_DIR}\" "-w")
 
 # GLM
 set (GLM_DIR "${LIB_DIR}/glm")

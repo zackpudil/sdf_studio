@@ -1,7 +1,5 @@
 #version 330 core
 
-#define PI acos(-1.)
-
 in vec2 tex;
 out vec4 out_fragColor;
 
@@ -12,11 +10,6 @@ struct Light {
     vec3 color;
     int hasShadow;
     float shadowPenumbra;
-};
-
-struct Geometry {
-    int materialId;
-    float dist;
 };
 
 struct Material {
@@ -46,6 +39,7 @@ uniform float exposure;
 
 
 uniform float fudge;
+uniform float max_distance;
 uniform int max_iterations;
 
 uniform samplerCube irr;
@@ -146,41 +140,40 @@ float fbm(vec3 x) {
 
 // ====================== END Randome/Noise ================================
 
-// ======================= SDF Helpers ==========================
+<<SDF_HELPERS>>
 
-Geometry opCombine(Geometry a, Geometry b) {
-    return a.dist < b.dist ? a : b;
+float de(vec3 p, out int mId);
+
+float sdfs_getGeomertry(vec3 p, out int materialId) {
+    return de(p, materialId);
 }
 
-// ====================== END SDF Helpers =======================
-
-Geometry de(vec3 p);
-
-Geometry sdfs_getGeomertry(vec3 p) {
-    return de(p);
+float sdfs_getGeomertry(vec3 p) {
+    int tmp;
+    return de(p, tmp);
 }
 
 // ======================== TRACING FUNCTIONS ========================
-Geometry sdfs_trace(vec3 ro, vec3 rd, float mx) {
+float sdfs_trace(vec3 ro, vec3 rd, float mx, out int materialId) {
     float totalDistance = 0.0;
-    int materialId = -1;
 
     for(int i = 0; i < 300; i++) {
-        Geometry d = sdfs_getGeomertry(ro + rd*totalDistance);
-        if(d.dist < 0.0001*totalDistance || totalDistance >= mx) break;
-        totalDistance += d.dist*fudge;
-        materialId = d.materialId;
+        int mId;
+        float d = sdfs_getGeomertry(ro + rd*totalDistance, mId);
+        if(d < 0.0001*totalDistance || totalDistance >= mx) break;
+        totalDistance += d*fudge;
+        materialId = mId;
     }
 
-    return Geometry(materialId, totalDistance);
+    return totalDistance;
 }
 
 vec3 sdfs_getNormal(vec3 p) {
     vec2 h = vec2(0.001, 0.0);
     vec3 n = vec3(
-        sdfs_getGeomertry(p + h.xyy).dist - sdfs_getGeomertry(p - h.xyy).dist,
-        sdfs_getGeomertry(p + h.yxy).dist - sdfs_getGeomertry(p - h.yxy).dist,
-        sdfs_getGeomertry(p + h.yyx).dist - sdfs_getGeomertry(p - h.yyx).dist
+        sdfs_getGeomertry(p + h.xyy) - sdfs_getGeomertry(p - h.xyy),
+        sdfs_getGeomertry(p + h.yxy) - sdfs_getGeomertry(p - h.yxy),
+        sdfs_getGeomertry(p + h.yyx) - sdfs_getGeomertry(p - h.yyx)
     );
 
     return normalize(n);
@@ -189,8 +182,9 @@ vec3 sdfs_getNormal(vec3 p) {
 float sdfs_getAmbientOcclusion(vec3 p, vec3 n) {
     float o = 0.0, s = 0.005, w = 1.0;
 
+    int tmp;
     for(int i = 0; i < 15; i++) {
-        float d = sdfs_getGeomertry(p + n*s).dist;
+        float d = sdfs_getGeomertry(p + n*s, tmp);
         o += (s - d)*w;
         w *= 0.98;
         s += s/float(i + 1);
@@ -203,13 +197,14 @@ float sdfs_getAmbientOcclusion(vec3 p, vec3 n) {
 float sdfs_getSoftShadow( in vec3 ro, in vec3 rd, float mint, float maxt, float k )
 {
     float res = 1.0;
+    int tmp;
     for( float t=mint; t<maxt; )
     {
-        float h = sdfs_getGeomertry(ro + rd*t).dist;
+        float h = sdfs_getGeomertry(ro + rd*t, tmp);
         if( h<0.0001 )
             return 0.0;
         res = min( res, k*h/t );
-        t += h;
+        t += h*fudge;
     }
     return res;
 }
@@ -264,6 +259,19 @@ vec3 sdfs_getIndirectLighting(vec3 n, vec3 rd, vec3 rf,
     return (dif + spe*dom)*occ;
 }
 
+vec4 sdfs_getSubsurfaceScatter(vec3 origin, vec3 direction) {
+    vec3 p = origin;
+    float e = 0.0;
+    for(int i = 0; i < 7; i++) {
+        float d = sdfs_getGeomertry(p);
+        e += -d;
+        if(d > -0.001) break;
+        p -= d*direction;
+    }
+
+    return vec4(p, e);
+}
+
 // ==================== END LIGHTING ==================================
 
 // ==================== MATERIAL FUNCTIONS ===============================
@@ -278,11 +286,11 @@ vec4 textureTriPlannar(sampler2D s, vec3 p, vec3 n) {
     return (x + y + z)/(m.x + m.y + m.z);
 }
 
-#define getSDFNormal(p, sdf) normalize(vec3(sdf(p + vec3(0.001, 0, 0)).dist - sdf(p - vec3(0.001, 0, 0)).dist,sdf(p + vec3(0, 0.001, 0)).dist - sdf(p - vec3(0, 0.001, 0)).dist,sdf(p + vec3(0, 0, 0.001)).dist - sdf(p - vec3(0, 0, 0.001)).dist))
+#define pToUv(p, n, uv) (uv(p.yz)*(pow(abs(n.x), 10.0)) + uv(p.xz)*(pow(abs(n.y), 10.0)) + uv(p.xy)*(pow(abs(n.z), 10.0)))/(pow(abs(n.x), 10.0) + pow(abs(n.y), 10.0) + pow(abs(n.z), 10.0))
+#define getSDFNormal(p, sdf) normalize(vec3(sdf(p + vec3(0.001, 0, 0)) - sdf(p - vec3(0.001, 0, 0)), sdf(p + vec3(0, 0.001, 0)) - sdf(p - vec3(0, 0.001, 0)), sdf(p + vec3(0, 0, 0.001)) - sdf(p - vec3(0, 0, 0.001))))
 
 vec3 getNormalBump(vec3 p, vec3 n, vec3 bump) {
     vec3 tangentNormal = bump*2.0 - 1.0;
-
 
     vec3 T = normalize(vec3(0));
     vec3 B = normalize(cross(n, T));
@@ -298,28 +306,30 @@ Material applyPBRTexture(vec3 position, inout vec3 normal, PBRTexture pbr) {
     float met = textureTriPlannar(pbr.metal, position, normal).r;
 
     vec3 nor = textureTriPlannar(pbr.normal, position, normal).rgb;
-    vec3 ner =getNormalBump(position, normal, nor); 
-    //normal = getNormalBump(position, normal, nor);
+    normal = getNormalBump(position, normal, nor);
 
-    return Material(ner, rough, met, vec3(0.05), occ);
+    return Material(alb*alb, rough, met, vec3(0.05), occ);
 }
 
-Material getMaterial(vec3 position, inout vec3 normal, Geometry geometry);
+Material getMaterial(vec3 position, inout vec3 normal, int mId);
 // ==================== END MATERIAL FUNCTIONS ==========================
 
 // ==================== MAIN RENDER =====================================
 vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
     vec3 pixelColor = texture(irr, rayDirection).rgb;
 
-    Geometry geometry = sdfs_trace(rayOrigin, rayDirection, 50.0);
+    int materialId;
+    float geometry = sdfs_trace(rayOrigin, rayDirection, 50.0, materialId);
 
-    if(geometry.dist < 50.0) {
+    float dt = rayOrigin.y/rayDirection.y;
+
+    if(geometry < 50.0) {
         pixelColor = vec3(0);
-        vec3 position = rayOrigin + rayDirection*geometry.dist;
+        vec3 position = rayOrigin + rayDirection*geometry;
         vec3 normal = sdfs_getNormal(position);
         float ambientOcclusion = sdfs_getAmbientOcclusion(position, normal);
 
-        Material material = getMaterial(position, normal, geometry);
+        Material material = getMaterial(position, normal, materialId);
 
         vec3 positionOffset = position + normal*0.001;
         vec3 reflectedRay = reflect(rayDirection, normal);
@@ -363,6 +373,17 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
                 reflectanceOcclusion,
                 lights[i].color
             );
+
+            vec3 stepOff = normalize(mix(-normal, rayDirection, 0.5));
+            vec4 subsurfaceResult = sdfs_getSubsurfaceScatter(position+stepOff*0.02, rayDirection);
+            float subsurfaceScattering = max(0.0, 1.0 - 5.0*subsurfaceResult.w);
+            float surfaceVisibility = max(0.0,
+                dot(
+                    sdfs_getNormal(subsurfaceResult.xyz),
+                    normalize(lightDirection - subsurfaceResult.xyz)
+                )
+            );
+            pixelColor += material.albedo*mix(subsurfaceScattering, surfaceVisibility, 0.2);
         }
 
         pixelColor += sdfs_getIndirectLighting(

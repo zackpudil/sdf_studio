@@ -1,4 +1,5 @@
 #include <program.h>
+#include <texture.h>
 
 #pragma once
 
@@ -11,4 +12,7 @@ public:
 	void DrawCube();
 private:
 	GLuint ebo, vbo, vao;
+	GLuint fbo, rbo;
+
+	Texture *mainTexture;
 };
