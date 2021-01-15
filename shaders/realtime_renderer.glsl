@@ -383,7 +383,7 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
                     normalize(lightDirection - subsurfaceResult.xyz)
                 )
             );
-            pixelColor += material.albedo*mix(subsurfaceScattering, surfaceVisibility, 0.2);
+            //pixelColor += material.albedo*mix(subsurfaceScattering, surfaceVisibility, 0.2);
         }
 
         pixelColor += sdfs_getIndirectLighting(
