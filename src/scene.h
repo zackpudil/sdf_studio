@@ -56,7 +56,11 @@ public:
 
 	Texture* BrdfTexture;
 	float DebugPlaneHeight = -10.0f;
+	bool UseDebugPlane = false;
 	float FudgeFactor = 1.0f;
+	float MaxDistance = 50.0f;
+	int MaxIterations = 300;
+	bool ShowRayAmount = false;
 private:
 	Program* program;
 	Screen* screen;

@@ -1,5 +1,7 @@
 #version 330 core
 
+#define INFINITY pow(2.,8.)
+
 in vec2 tex;
 out vec4 out_fragColor;
 
@@ -19,6 +21,9 @@ struct Material {
     float metal;
     vec3 fresnel;
     float ambientOcclusion;
+
+    vec3 subsurfaceColor;
+    float subsurfaceScatteringAmount;
 };
 
 struct PBRTexture {
@@ -29,6 +34,7 @@ struct PBRTexture {
     sampler2D ambientOcclusion;
     sampler2D height;
 };
+;
 //========================= END Type Definitions =======================
 
 uniform vec2 resolution;
@@ -39,8 +45,11 @@ uniform float exposure;
 
 
 uniform float fudge;
-uniform float max_distance;
-uniform int max_iterations;
+uniform float maxDistance;
+uniform int maxIterations;
+uniform int useDebugPlane;
+uniform float debugPlaneHeight;
+uniform int showRayMarchAmount;
 
 uniform samplerCube irr;
 uniform samplerCube prefilter;
@@ -70,30 +79,17 @@ float noise(vec2 n) {
 	return mix(mix(rand(b), rand(b + d.yx), f.x), mix(rand(b + d.xy), rand(b + d.yy), f.x), f.y);
 }
 
-float mod289(float x){return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec4 mod289(vec4 x){return x - floor(x * (1.0 / 289.0)) * 289.0; }
-vec4 perm(vec4 x){return mod289(((x * 34.0) + 1.0) * x); }
+float noise(vec3 x) {
+	vec3 p = floor(x);
+	vec3 f = fract(x);
+	f = f * f * (3.0 - 2.0 * f);
 
-float noise(vec3 p){
-    vec3 a = floor(p);
-    vec3 d = p - a;
-    d = d * d * (3.0 - 2.0 * d);
-
-    vec4 b = a.xxyy + vec4(0.0, 1.0, 0.0, 1.0);
-    vec4 k1 = perm(b.xyxy);
-    vec4 k2 = perm(k1.xyxy + b.zzww);
-
-    vec4 c = k2 + a.zzzz;
-    vec4 k3 = perm(c);
-    vec4 k4 = perm(c + 1.0);
-
-    vec4 o1 = fract(k3 * (1.0 / 41.0));
-    vec4 o2 = fract(k4 * (1.0 / 41.0));
-
-    vec4 o3 = o2 * d.z + o1 * (1.0 - d.z);
-    vec2 o4 = o3.yw * d.x + o3.xz * (1.0 - d.x);
-
-    return o4.y * d.y + o4.x * (1.0 - d.y);
+	float n = p.x + p.y * 157.0 + 113.0 * p.z;
+	return mix(
+			mix(mix(rand(n + 0.0), rand(n + 1.0), f.x),
+					mix(rand(n + 157.0), rand(n + 158.0), f.x), f.y),
+			mix(mix(rand(n + 113.0), rand(n + 114.0), f.x),
+					mix(rand(n + 270.0), rand(n + 271.0), f.x), f.y), f.z);
 }
 
 #define NUM_OCTAVES 5
@@ -154,18 +150,45 @@ float sdfs_getGeomertry(vec3 p) {
 }
 
 // ======================== TRACING FUNCTIONS ========================
+int SDFS_TRACE_AMOUNT = 0;
 float sdfs_trace(vec3 ro, vec3 rd, float mx, out int materialId) {
     float totalDistance = 0.0;
 
-    for(int i = 0; i < 300; i++) {
-        int mId;
-        float d = sdfs_getGeomertry(ro + rd*totalDistance, mId);
-        if(d < 0.0001*totalDistance || totalDistance >= mx) break;
-        totalDistance += d*fudge;
-        materialId = mId;
+    float omega = 1.2;
+    float candidateError = INFINITY;
+    float candidateT = 0.0;
+    float previousRadius = 0.0;
+    float stepLength = 0.0;
+    float functionSign = sdfs_getGeomertry(ro) < 0 ? -1 : 1;
+    
+    for(int i = 0; i < 500; i++) {
+        if(i >= maxIterations) break;
+
+        float signedRadius = functionSign*sdfs_getGeomertry(ro + rd*(totalDistance), materialId);
+        float radius = abs(signedRadius);
+        bool sorFail = omega > 1 && (radius + previousRadius) < stepLength;
+        if(sorFail) {
+            stepLength -= omega * stepLength;
+            omega = 1;
+        } else {
+            stepLength = signedRadius * omega;
+        }
+
+        previousRadius = radius;
+        float error = radius/totalDistance;
+
+        if(!sorFail && error < candidateError) {
+            candidateT = totalDistance;
+            candidateError = error;
+        }
+
+        if(!sorFail && error < 0.001 || totalDistance > maxDistance) break;
+        totalDistance += (stepLength)*fudge;
+        SDFS_TRACE_AMOUNT += 1;
     }
 
-    return totalDistance;
+    if(totalDistance > maxDistance) return INFINITY;
+    return candidateT;
 }
 
 vec3 sdfs_getNormal(vec3 p) {
@@ -183,7 +206,7 @@ float sdfs_getAmbientOcclusion(vec3 p, vec3 n) {
     float o = 0.0, s = 0.005, w = 1.0;
 
     int tmp;
-    for(int i = 0; i < 15; i++) {
+    for(int i = 0; i < 10; i++) {
         float d = sdfs_getGeomertry(p + n*s, tmp);
         o += (s - d)*w;
         w *= 0.98;
@@ -207,6 +230,19 @@ float sdfs_getSoftShadow( in vec3 ro, in vec3 rd, float mint, float maxt, float 
         t += h*fudge;
     }
     return res;
+}
+
+vec4 sdfs_getSubsurfaceScatter(vec3 origin, vec3 direction) {
+    vec3 p = origin;
+    float e = 0.0;
+    for(int i = 0; i < 300; i++) {
+        float d = sdfs_getGeomertry(p);
+        e += -d*fudge;
+        if(d > -0.001) break;
+        p -= d*direction;
+    }
+
+    return vec4(p, e);
 }
 // ======================== END TRACING FUNCTIONS ========================
 
@@ -259,19 +295,6 @@ vec3 sdfs_getIndirectLighting(vec3 n, vec3 rd, vec3 rf,
     return (dif + spe*dom)*occ;
 }
 
-vec4 sdfs_getSubsurfaceScatter(vec3 origin, vec3 direction) {
-    vec3 p = origin;
-    float e = 0.0;
-    for(int i = 0; i < 7; i++) {
-        float d = sdfs_getGeomertry(p);
-        e += -d;
-        if(d > -0.001) break;
-        p -= d*direction;
-    }
-
-    return vec4(p, e);
-}
-
 // ==================== END LIGHTING ==================================
 
 // ==================== MATERIAL FUNCTIONS ===============================
@@ -308,22 +331,76 @@ Material applyPBRTexture(vec3 position, inout vec3 normal, PBRTexture pbr) {
     vec3 nor = textureTriPlannar(pbr.normal, position, normal).rgb;
     normal = getNormalBump(position, normal, nor);
 
-    return Material(alb*alb, rough, met, vec3(0.05), occ);
+    return Material(alb*alb, rough, met, vec3(0.05), occ, vec3(0), 0);
 }
 
 Material getMaterial(vec3 position, inout vec3 normal, int mId);
 // ==================== END MATERIAL FUNCTIONS ==========================
+
+// ===================== DEBUGGIN FUNCTIONS =============================
+vec3 fusion(float x) {
+	float t = clamp(x,0.0,1.0);
+	return clamp(vec3(sqrt(t), t*t*t, max(sin(PI*1.75*t), pow(t, 12.0))), 0.0, 1.0);
+}
+
+vec3 fusionHDR(float x) {
+	float t = clamp(x,0.0,1.0);
+	return fusion(sqrt(t))*(0.5+2.*t);
+}
+
+vec3 distanceMeter(float dist, float rayLength, vec3 rayDir, float camHeight) {
+    float idealGridDistance = 20.0/rayLength*pow(abs(rayDir.y),0.8);
+    float nearestBase = floor(log(idealGridDistance)/log(10.));
+    float relativeDist = abs(dist/camHeight);
+    
+    float largerDistance = pow(10.0,nearestBase+1.);
+    float smallerDistance = pow(10.0,nearestBase);
+
+   
+    vec3 col = fusionHDR(log(1.+relativeDist));
+    col = max(vec3(0.),col);
+    if (sign(dist) < 0.) {
+        col = col.grb*3.;
+    }
+
+    float l0 = (pow(0.5+0.5*cos(dist*PI*2.*smallerDistance),10.0));
+    float l1 = (pow(0.5+0.5*cos(dist*PI*2.*largerDistance),10.0));
+    
+    float x = fract(log(idealGridDistance)/log(10.));
+    l0 = mix(l0,0.,smoothstep(0.5,1.0,x));
+    l1 = mix(0.,l1,smoothstep(0.0,0.5,x));
+
+    col.rgb *= 0.1+0.9*(1.-l0)*(1.-l1);
+    return col;
+}
+// ===================== END DEBUGGIN FUNCTIONS =========================
 
 // ==================== MAIN RENDER =====================================
 vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
     vec3 pixelColor = texture(irr, rayDirection).rgb;
 
     int materialId;
-    float geometry = sdfs_trace(rayOrigin, rayDirection, 50.0, materialId);
+    float geometry = sdfs_trace(rayOrigin, rayDirection, maxDistance, materialId);
 
-    float dt = rayOrigin.y/rayDirection.y;
+    if(showRayMarchAmount == 1) {
+        return mix(
+            vec3(0, 0, 1),
+            vec3(1, 0, 0),
+            float(SDFS_TRACE_AMOUNT)/float(maxIterations));
+    }
 
-    if(geometry < 50.0) {
+    if (useDebugPlane == 1) {
+        float dt = INFINITY;
+        if(rayDirection.y < 0) {
+            dt = (rayOrigin.y - debugPlaneHeight)/-rayDirection.y;
+        }
+
+        if(geometry > dt) {
+            return distanceMeter(sdfs_getGeomertry(rayOrigin + dt*rayDirection), dt, rayDirection, rayOrigin.y);
+        }
+    }
+
+    if(geometry < maxDistance) {
         pixelColor = vec3(0);
         vec3 position = rayOrigin + rayDirection*geometry;
         vec3 normal = sdfs_getNormal(position);
@@ -374,16 +451,19 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
                 lights[i].color
             );
 
-            vec3 stepOff = normalize(mix(-normal, rayDirection, 0.5));
-            vec4 subsurfaceResult = sdfs_getSubsurfaceScatter(position+stepOff*0.02, rayDirection);
-            float subsurfaceScattering = max(0.0, 1.0 - 5.0*subsurfaceResult.w);
-            float surfaceVisibility = max(0.0,
-                dot(
-                    sdfs_getNormal(subsurfaceResult.xyz),
-                    normalize(lightDirection - subsurfaceResult.xyz)
-                )
-            );
-            //pixelColor += material.albedo*mix(subsurfaceScattering, surfaceVisibility, 0.2);
+            if(material.metal == 0 && material.subsurfaceScatteringAmount != 0) {
+                vec3 stepOff = normalize(mix(-normal, rayDirection, 0.5));
+                vec4 subsurfaceResult = sdfs_getSubsurfaceScatter(position+stepOff*0.2, rayDirection);
+                float subAmount = 1.0 + 9.0*smoothstep(0.0, 1.0, 1.0-material.subsurfaceScatteringAmount);
+                float subsurfaceScattering = max(0.0, (1.0 - subAmount*subsurfaceResult.w));
+                float surfaceVisibility = max(0.0,
+                    dot(
+                        sdfs_getNormal(subsurfaceResult.xyz),
+                        normalize(lightDirection - subsurfaceResult.xyz)
+                    )
+                );
+                pixelColor += lights[i].color*material.subsurfaceColor*mix(subsurfaceScattering, surfaceVisibility, 0.2)/numberOfLights;
+            }
         }
 
         pixelColor += sdfs_getIndirectLighting(

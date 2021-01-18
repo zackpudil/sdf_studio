@@ -228,6 +228,10 @@ float fBoxCheap(vec3 p, vec3 b) { //cheap box
 	return vmax(abs(p) - b);
 }
 
+float fBoxCheap(vec2 p, vec2 b) {
+	return vmax(abs(p) - b);
+}
+
 // Box: correct distance to corners
 float fBox(vec3 p, vec3 b) {
 	vec3 d = abs(p) - b;

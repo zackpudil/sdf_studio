@@ -11,5 +11,10 @@ void CameraUI::Render() {
 	ImGui::SliderFloat("Sensitivity", &camera->Sensitivity, 0.1, 1.0);
 	ImGui::SliderFloat("Exposure", &camera->Exposure, 0.1, 2.0);
 
+	if (ImGui::Button("Reset")) {
+		camera->Position = glm::vec3(0, 0, 3);
+		camera->Direction = glm::vec3(0, 0, -1);
+	}
+
 	ImGui::End();
 }

@@ -13,6 +13,7 @@
 #include <environment.h>
 #include <ui/camera-ui.h>
 #include <ui/environment-ui.h>
+#include <ui\stats-ui.h>
 
 const int WIDTH = 1920;
 const int HEIGHT = 1080;
@@ -59,7 +60,7 @@ int main() {
 	ImGui_ImplOpenGL3_Init("#version 330");
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 
-	Camera camera(glm::vec3(0, 0, -3), glm::vec3(0, 0, 1));
+	Camera camera(glm::vec3(0, 0, 3), glm::vec3(0, 0, -1));
 	CameraUI cameraUI(&camera);
 
 	Environment environment;
@@ -68,8 +69,10 @@ int main() {
 	Scene scene(&camera, &environment);
 	SceneUI sceneUI(&scene);
 
+	StatsUI statsUI;
+
 	while (!glfwWindowShouldClose(window)) {
-		if (camera.IsMoving) {
+		if (camera.IsMoving || statsUI.KeepRunning) {
 			glfwPollEvents();
 		} else {
 			glfwWaitEvents();
@@ -81,7 +84,7 @@ int main() {
 		glViewport(0, 0, 1920, 1080);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			
+
 		scene.Render();
 
 		ImGui_ImplOpenGL3_NewFrame();
@@ -91,6 +94,7 @@ int main() {
 		cameraUI.Render();
 		environmentUI.Render();
 		sceneUI.Render();
+		statsUI.Render();
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

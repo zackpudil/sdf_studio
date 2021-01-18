@@ -39,8 +39,13 @@ void Scene::Render() {
 			.Bind("eye", camera->Position)
 			.Bind("fov", camera->Fov)
 			.Bind("exposure", camera->Exposure)
+			.Bind("brdf", BrdfTexture->Use2D())
 			.Bind("fudge", FudgeFactor)
-			.Bind("brdf", BrdfTexture->Use2D());
+			.Bind("maxDistance", MaxDistance)
+			.Bind("maxIterations", MaxIterations)
+			.Bind("useDebugPlane", UseDebugPlane ? 1 : 0)
+			.Bind("debugPlaneHeight", DebugPlaneHeight)
+			.Bind("showRayMarchAmount", ShowRayAmount ? 1 : 0);
 
 		environment->Use(program);
 

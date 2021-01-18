@@ -20,6 +20,14 @@ void SceneUI::Render() {
 
 	if (ImGui::CollapsingHeader("Debug")) {
 		ImGui::SliderFloat("Fudge Factor", &scene->FudgeFactor, 0.25f, 1.0f);
+		ImGui::SliderFloat("Max Distance", &scene->MaxDistance, 10.0f, 100.0f);
+		ImGui::SliderInt("Max Iterations", &scene->MaxIterations, 100, 500);
+		ImGui::Checkbox("Show Debug Plane", &scene->UseDebugPlane);
+
+		if(scene->UseDebugPlane)
+			ImGui::SliderFloat("Debug Plane", &scene->DebugPlaneHeight, -10.0f, 10.0f);
+
+		ImGui::Checkbox("Show Raymarch Amount", &scene->ShowRayAmount);
 	}
 
 	ImGui::Separator();
