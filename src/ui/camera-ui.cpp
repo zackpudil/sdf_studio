@@ -1,5 +1,6 @@
 #include "camera-ui.h"
 #include <imgui.h>
+#include <string>
 
 CameraUI::CameraUI(Camera *c) : camera(c) { }
 
@@ -15,6 +16,9 @@ void CameraUI::Render() {
 		camera->Position = glm::vec3(0, 0, 3);
 		camera->Direction = glm::vec3(0, 0, -1);
 	}
+
+	ImGui::Text(std::string(std::to_string(camera->Position.x) + "," + std::to_string(camera->Position.y) + "," + std::to_string(camera->Position.z)).c_str());
+	ImGui::Text(std::string(std::to_string(camera->Direction.x) + "," + std::to_string(camera->Direction.y) + "," + std::to_string(camera->Direction.z)).c_str());
 
 	ImGui::End();
 }

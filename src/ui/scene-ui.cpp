@@ -18,6 +18,16 @@ SceneUI::SceneUI(Scene* scene) : scene(scene) {
 void SceneUI::Render() {
 	ImGui::Begin("Scene");
 
+	static int resScale = 0;
+	if (ImGui::CollapsingHeader("Resolution")) {
+		ImGui::SliderInt("Resolution Scale", &resScale, 0, 4);
+		ImGui::SameLine();
+		if (ImGui::Button("Update")) {
+			scene->UpdateResolution(resScale);
+		}
+		ImGui::Checkbox("Pause", &scene->Pause);
+	}
+
 	if (ImGui::CollapsingHeader("Debug")) {
 		ImGui::SliderFloat("Fudge Factor", &scene->FudgeFactor, 0.25f, 1.0f);
 		ImGui::SliderFloat("Max Distance", &scene->MaxDistance, 10.0f, 100.0f);

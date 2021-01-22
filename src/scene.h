@@ -47,12 +47,15 @@ public:
 
 	bool InitShader();
 	void Render();
+	void Display();
 
 	std::string GetCompileError();
 	std::string GetUniformErrors();
 
 	std::vector<SceneUniform>* GetUniforms();
 	std::vector<SceneMaterial>* GetMaterials();
+
+	void UpdateResolution(int resScale);
 
 	Texture* BrdfTexture;
 	float DebugPlaneHeight = -10.0f;
@@ -61,11 +64,16 @@ public:
 	float MaxDistance = 50.0f;
 	int MaxIterations = 300;
 	bool ShowRayAmount = false;
+	bool Pause = false;
 private:
-	Program* program;
+	Program* renderProgram;
+	Program* displayProgram;
+
 	Screen* screen;
 	Camera* camera;
 	Environment* environment;
+
+	Texture* mainImage;
 	
 	std::vector<SceneUniform> sceneUniforms;
 	std::vector<SceneMaterial> sceneMaterials;
@@ -83,8 +91,10 @@ private:
 	GLuint fbo, rbo;
 
 	bool ready;
+	int resolutionScale;
 
 	void renderBrdf();
+
 	void bindUniform(SceneUniform);
 	void bindMaterial(SceneMaterial);
 
@@ -92,4 +102,6 @@ private:
 	std::string addMaterialsToCode();
 
 	SceneUniform createUniform(std::string, std::string, float, float);
+
+	glm::vec2 getResolution();
 };

@@ -15,8 +15,7 @@
 #include <ui/environment-ui.h>
 #include <ui\stats-ui.h>
 
-const int WIDTH = 1920;
-const int HEIGHT = 1080;
+#include "main.h"
 
 int main() {
 
@@ -81,11 +80,15 @@ int main() {
 		camera.HandleInput(window);
 		sceneUI.HandleInput(window);
 
-		glViewport(0, 0, 1920, 1080);
+		scene.Render();
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glViewport(0, 0, WIDTH, HEIGHT);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glViewport(0, 0, WIDTH, HEIGHT);
 
-		scene.Render();
+		scene.Display();
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();

@@ -1,6 +1,7 @@
 #version 330 core
 
 #define INFINITY pow(2.,8.)
+#define sat(p) clamp(p, 0.0, 1.0)
 
 in vec2 tex;
 out vec4 out_fragColor;
@@ -14,16 +15,23 @@ struct Light {
     float shadowPenumbra;
 };
 
+struct SubSurfaceMaterial {
+    vec3 albedo;
+    
+    float ambient;
+    float depth;
+    float distortion;
+    float power;
+};
+
 struct Material {
     vec3 albedo;
 
     float roughness;
     float metal;
-    vec3 fresnel;
     float ambientOcclusion;
 
-    vec3 subsurfaceColor;
-    float subsurfaceScatteringAmount;
+    bool subsurface;
 };
 
 struct PBRTexture {
@@ -65,6 +73,12 @@ float rand(float n){return fract(sin(n) * 43758.5453123);}
 
 float rand(vec2 n) { 
 	return fract(sin(dot(n, vec2(12.9898, 4.1414))) * 43758.5453);
+}
+
+vec3 hash33(vec3 p3) {
+	p3 = fract(p3 * vec3(443.897, 441.423, 437.195));
+    p3 += dot(p3, p3.yxz+19.19);
+    return fract((p3.xxy + p3.yxx)*p3.zyx);
 }
 
 float noise(float p){
@@ -140,11 +154,11 @@ float fbm(vec3 x) {
 
 float de(vec3 p, out int mId);
 
-float sdfs_getGeomertry(vec3 p, out int materialId) {
+float sdfs_getGeometry(vec3 p, out int materialId) {
     return de(p, materialId);
 }
 
-float sdfs_getGeomertry(vec3 p) {
+float sdfs_getGeometry(vec3 p) {
     int tmp;
     return de(p, tmp);
 }
@@ -159,12 +173,12 @@ float sdfs_trace(vec3 ro, vec3 rd, float mx, out int materialId) {
     float candidateT = 0.0;
     float previousRadius = 0.0;
     float stepLength = 0.0;
-    float functionSign = sdfs_getGeomertry(ro) < 0 ? -1 : 1;
+    float functionSign = sdfs_getGeometry(ro) < 0 ? -1 : 1;
     
     for(int i = 0; i < 500; i++) {
         if(i >= maxIterations) break;
 
-        float signedRadius = functionSign*sdfs_getGeomertry(ro + rd*(totalDistance), materialId);
+        float signedRadius = functionSign*sdfs_getGeometry(ro + rd*(totalDistance), materialId);
         float radius = abs(signedRadius);
         bool sorFail = omega > 1 && (radius + previousRadius) < stepLength;
         if(sorFail) {
@@ -194,9 +208,9 @@ float sdfs_trace(vec3 ro, vec3 rd, float mx, out int materialId) {
 vec3 sdfs_getNormal(vec3 p) {
     vec2 h = vec2(0.001, 0.0);
     vec3 n = vec3(
-        sdfs_getGeomertry(p + h.xyy) - sdfs_getGeomertry(p - h.xyy),
-        sdfs_getGeomertry(p + h.yxy) - sdfs_getGeomertry(p - h.yxy),
-        sdfs_getGeomertry(p + h.yyx) - sdfs_getGeomertry(p - h.yyx)
+        sdfs_getGeometry(p + h.xyy) - sdfs_getGeometry(p - h.xyy),
+        sdfs_getGeometry(p + h.yxy) - sdfs_getGeometry(p - h.yxy),
+        sdfs_getGeometry(p + h.yyx) - sdfs_getGeometry(p - h.yyx)
     );
 
     return normalize(n);
@@ -205,9 +219,8 @@ vec3 sdfs_getNormal(vec3 p) {
 float sdfs_getAmbientOcclusion(vec3 p, vec3 n) {
     float o = 0.0, s = 0.005, w = 1.0;
 
-    int tmp;
     for(int i = 0; i < 10; i++) {
-        float d = sdfs_getGeomertry(p + n*s, tmp);
+        float d = sdfs_getGeometry(p + n*s);
         o += (s - d)*w;
         w *= 0.98;
         s += s/float(i + 1);
@@ -217,32 +230,38 @@ float sdfs_getAmbientOcclusion(vec3 p, vec3 n) {
 }
 
 
-float sdfs_getSoftShadow( in vec3 ro, in vec3 rd, float mint, float maxt, float k )
-{
+float sdfs_getSoftShadow( in vec3 ro, in vec3 rd, float mint, float maxt, float k ) {
     float res = 1.0;
-    int tmp;
-    for( float t=mint; t<maxt; )
-    {
-        float h = sdfs_getGeomertry(ro + rd*t, tmp);
-        if( h<0.0001 )
-            return 0.0;
-        res = min( res, k*h/t );
+    float t = mint;
+
+    float ph = 0.0;
+
+    for(int i = 0; i < 200; i++) {
+        float h = sdfs_getGeometry(ro + rd*t);
+        float y = (i == 0) ? 0.0 : h*h/(2.0*ph);
+        float d = sqrt(h*h - y*y);
+        res = min(res, k*d/max(0.0, t-y));
+        ph = h;
+
         t += h*fudge;
+        if(res < 0.0001 || t > maxt) break;
     }
-    return res;
+
+    return clamp(res, 0.0, 1.0);
 }
 
-vec4 sdfs_getSubsurfaceScatter(vec3 origin, vec3 direction) {
-    vec3 p = origin;
-    float e = 0.0;
-    for(int i = 0; i < 300; i++) {
-        float d = sdfs_getGeomertry(p);
-        e += -d*fudge;
-        if(d > -0.001) break;
-        p -= d*direction;
+float sdfs_getSubsurfaceScatter(vec3 p, vec3 n, float depth) {
+    float t = 0.0;
+
+    for(int i = 0; i < 64; i++) {
+        float len = rand(float(i))*depth;
+        vec3 sampleDir = normalize(hash33(-n + i));
+        sampleDir = sampleDir - 2*n*max(0, -dot(-n,sampleDir));
+
+        t += len + sdfs_getGeometry(p + (sampleDir*len));
     }
 
-    return vec4(p, e);
+    return clamp(t/64, 0.0, 1.0);
 }
 // ======================== END TRACING FUNCTIONS ========================
 
@@ -258,7 +277,7 @@ vec3 sdfs_getDirectLighting(vec3 n, vec3 l, vec3 rd,
     float nov = clamp(dot(n, v), 0.0, 1.0);
     float hov = dot(h, v);
 
-    vec3 f = mix(vec3(material.fresnel), material.albedo, material.metal);
+    vec3 f = mix(vec3(0.04), material.albedo, material.metal);
     vec3 F = f + (1.0 - f)*pow(1.0 - hov, 5.0);
     
     float a2 = pow(material.roughness, 4.0);
@@ -282,7 +301,7 @@ vec3 sdfs_getIndirectLighting(vec3 n, vec3 rd, vec3 rf,
     vec3 v = normalize(-rd);
     float nov = clamp(dot(n, v), 0.0, 1.0);
 
-    vec3 f = mix(material.fresnel, material.albedo, material.metal);
+    vec3 f = mix(vec3(0.05), material.albedo, material.metal);
     vec3 F = f + (max(vec3(1.0 - material.roughness), f) - f)*pow(1.0 - nov, 5.0);
 
     vec3 irr = texture(irr, n).rgb;
@@ -331,10 +350,11 @@ Material applyPBRTexture(vec3 position, inout vec3 normal, PBRTexture pbr) {
     vec3 nor = textureTriPlannar(pbr.normal, position, normal).rgb;
     normal = getNormalBump(position, normal, nor);
 
-    return Material(alb*alb, rough, met, vec3(0.05), occ, vec3(0), 0);
+    return Material(alb*alb, rough, met, occ, false);
 }
 
 Material getMaterial(vec3 position, inout vec3 normal, int mId);
+SubSurfaceMaterial getSubsurfaceMaterial(Material m, int mid);
 // ==================== END MATERIAL FUNCTIONS ==========================
 
 // ===================== DEBUGGIN FUNCTIONS =============================
@@ -396,7 +416,7 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
         }
 
         if(geometry > dt) {
-            return distanceMeter(sdfs_getGeomertry(rayOrigin + dt*rayDirection), dt, rayDirection, rayOrigin.y);
+            return distanceMeter(sdfs_getGeometry(rayOrigin + dt*rayDirection), dt, rayDirection, rayOrigin.y);
         }
     }
 
@@ -408,13 +428,13 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
 
         Material material = getMaterial(position, normal, materialId);
 
-        vec3 positionOffset = position + normal*0.001;
         vec3 reflectedRay = reflect(rayDirection, normal);
 
-        float reflectanceOcclusion = 0.5 + 0.5*sdfs_getSoftShadow(
-            positionOffset,
+        
+        float reflectanceOcclusion = material.roughness + (1.0 - material.roughness)*sdfs_getSoftShadow(
+            position + normal*0.005,
             reflectedRay,
-            0.01, 10.0,
+            0.01, 2.0,
             32*(1.0 - material.roughness)
         );
 
@@ -434,7 +454,7 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
             float directLightShadow = 1.0;
             if(lights[i].hasShadow == 1) {
                 directLightShadow = sdfs_getSoftShadow(
-                    positionOffset + normal*0.001,
+                    position + normal*0.005,
                     lightDirection,
                     0.01, 10.0,
                     lights[i].shadowPenumbra
@@ -451,18 +471,17 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
                 lights[i].color
             );
 
-            if(material.metal == 0 && material.subsurfaceScatteringAmount != 0) {
-                vec3 stepOff = normalize(mix(-normal, rayDirection, 0.5));
-                vec4 subsurfaceResult = sdfs_getSubsurfaceScatter(position+stepOff*0.2, rayDirection);
-                float subAmount = 1.0 + 9.0*smoothstep(0.0, 1.0, 1.0-material.subsurfaceScatteringAmount);
-                float subsurfaceScattering = max(0.0, (1.0 - subAmount*subsurfaceResult.w));
-                float surfaceVisibility = max(0.0,
-                    dot(
-                        sdfs_getNormal(subsurfaceResult.xyz),
-                        normalize(lightDirection - subsurfaceResult.xyz)
-                    )
-                );
-                pixelColor += lights[i].color*material.subsurfaceColor*mix(subsurfaceScattering, surfaceVisibility, 0.2)/numberOfLights;
+            if(material.metal == 0 && material.subsurface) {
+                SubSurfaceMaterial sssMate = getSubsurfaceMaterial(material, materialId);
+
+                vec3 toEye = -rayDirection;
+                vec3 sssLight = lightDirection + normal*sssMate.distortion;
+                float sssDot = pow(sat(dot(toEye, -sssLight)), 0.1 + sssMate.power);
+
+                float thickness = sdfs_getSubsurfaceScatter(position, normal, sssMate.depth);
+                float sss = (sssDot + sssMate.ambient)*thickness;
+
+                pixelColor += lights[i].color*sssMate.albedo*sss;
             }
         }
 

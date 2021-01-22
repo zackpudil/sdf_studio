@@ -9,7 +9,7 @@ public:
 
 	void LoadHDRIFromFile2D(std::string);
 	void LoadFromFile2D(std::string);
-	void Allocate2D();
+	void Allocate2D(int width=512, int height=512, bool rg = true);
 	void AllocateCube(int width, int height, bool generateMipMap = false);
 
 	int Use2D();

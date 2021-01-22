@@ -1,0 +1,3 @@
+
+int WIDTH = 1920;
+int HEIGHT = 1080;

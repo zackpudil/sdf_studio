@@ -6,9 +6,12 @@
 #include <algorithm>
 
 Scene::Scene(Camera *c, Environment *e) : camera(c), environment(e) {
-	program = new Program();
+	renderProgram = new Program();
+	displayProgram = new Program();
+
 	screen = new Screen();
 	BrdfTexture = new Texture();
+	mainImage = new Texture();
 
 	screen->PrepareQuad();
 
@@ -24,17 +27,21 @@ Scene::Scene(Camera *c, Environment *e) : camera(c), environment(e) {
 	std::ifstream brdfStream(std::string(PROJECT_SOURCE_DIR "/shaders/utils/precomputed_brdf.glsl"));
 	brdfSource = std::string(std::istreambuf_iterator<char>(brdfStream), std::istreambuf_iterator<char>());
 
-	glGenFramebuffers(1, &fbo);
-	glGenRenderbuffers(1, &rbo);
-
 	ready = false;
 	renderBrdf();
+	UpdateResolution(0);
 }
 
 void Scene::Render() {
-	if (ready) {
-		program->Activate()
-			.Bind("resolution", glm::vec2(1920, 1080))
+	if (ready && !Pause) {
+		auto res = getResolution();
+		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+		glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+		glViewport(0, 0, res.x, res.y);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+		renderProgram->Activate()
+			.Bind("resolution", res)
 			.Bind("camera", camera->GetViewMatrix())
 			.Bind("eye", camera->Position)
 			.Bind("fov", camera->Fov)
@@ -47,12 +54,19 @@ void Scene::Render() {
 			.Bind("debugPlaneHeight", DebugPlaneHeight)
 			.Bind("showRayMarchAmount", ShowRayAmount ? 1 : 0);
 
-		environment->Use(program);
+		environment->Use(renderProgram);
 
 		for (auto u : sceneUniforms) bindUniform(u);
 		for (auto t : sceneMaterials) bindMaterial(t);
-
 	}
+
+
+	screen->DrawQuad();
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void Scene::Display() {
+	displayProgram->Activate().Bind("mainImage", mainImage->Use2D());
 
 	screen->DrawQuad();
 }
@@ -86,7 +100,7 @@ bool Scene::InitShader() {
 		start_pos = code.find("<<TEXTURES>>");
 		code.replace(start_pos, 12, addMaterialsToCode());
 
-		program->Reload()
+		renderProgram->Reload()
 			.Attach(vertSource, GL_VERTEX_SHADER)
 			.Attach(code, GL_FRAGMENT_SHADER)
 			.Link();
@@ -126,11 +140,15 @@ std::string Scene::GetUniformErrors() {
 void Scene::renderBrdf() {
 	BrdfTexture->Allocate2D();
 
-	program->Reload()
+	renderProgram->Reload()
 		.Attach(vertSource, GL_VERTEX_SHADER)
 		.Attach(brdfSource, GL_FRAGMENT_SHADER)
 		.Link()
 		.Activate();
+
+
+	glGenFramebuffers(1, &fbo);
+	glGenRenderbuffers(1, &rbo);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
@@ -141,25 +159,53 @@ void Scene::renderBrdf() {
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	screen->DrawQuad();
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	program->Reload();
+
+	glDeleteFramebuffers(1, &fbo);
+	glDeleteRenderbuffers(1, &rbo);
+	renderProgram->Reload();
+
+}
+
+void Scene::UpdateResolution(int resolution) {
+	resolutionScale = resolution;
+
+	auto res = getResolution();
+	mainImage->Allocate2D(res.x, res.y, false);
+
+	std::ifstream sourceStream(std::string(PROJECT_SOURCE_DIR "/shaders/image_frag.glsl"));
+	auto source = std::string(std::istreambuf_iterator<char>(sourceStream), std::istreambuf_iterator<char>());
+
+	displayProgram->Reload()
+		.Attach(vertSource, GL_VERTEX_SHADER)
+		.Attach(source, GL_FRAGMENT_SHADER)
+		.Link();
+
+	glGenFramebuffers(1, &fbo);
+	glGenRenderbuffers(1, &rbo);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, res.x, res.y);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mainImage->TextureId, 0);
 
 }
 
 void Scene::bindUniform(SceneUniform uniform) {
 	switch (uniform.type) {
 	case UniformType::Int:
-		program->Bind(uniform.name, uniform.valuei[0]);
+		renderProgram->Bind(uniform.name, uniform.valuei[0]);
+		break;
 	case UniformType::Float:
-		program->Bind(uniform.name, uniform.valuesf[0]);
+		renderProgram->Bind(uniform.name, uniform.valuesf[0]);
 		break;
 	case UniformType::Vector2:
-		program->Bind(uniform.name, glm::vec2(uniform.valuesf[0], uniform.valuesf[1]));
+		renderProgram->Bind(uniform.name, glm::vec2(uniform.valuesf[0], uniform.valuesf[1]));
 		break;
 	case UniformType::Vector3:
-		program->Bind(uniform.name, glm::vec3(uniform.valuesf[0], uniform.valuesf[1], uniform.valuesf[2]));
+		renderProgram->Bind(uniform.name, glm::vec3(uniform.valuesf[0], uniform.valuesf[1], uniform.valuesf[2]));
 		break;
 	case UniformType::Vector4:
-		program->Bind(uniform.name, glm::vec4(uniform.valuesf[0], uniform.valuesf[1], uniform.valuesf[2], uniform.valuesf[3]));
+		renderProgram->Bind(uniform.name, glm::vec4(uniform.valuesf[0], uniform.valuesf[1], uniform.valuesf[2], uniform.valuesf[3]));
 		break;
 	default:
 		break;
@@ -167,12 +213,12 @@ void Scene::bindUniform(SceneUniform uniform) {
 }
 
 void Scene::bindMaterial(SceneMaterial texture) {
-	if (texture.albedo->TextureId > 0) program->Bind(texture.name + ".albedo", texture.albedo->Use2D());
-	if (texture.roughness->TextureId > 0) program->Bind(texture.name + ".roughness", texture.roughness->Use2D());
-	if (texture.metal->TextureId > 0) program->Bind(texture.name + ".metal", texture.metal->Use2D());
-	if (texture.normal->TextureId > 0) program->Bind(texture.name + ".normal", texture.normal->Use2D());
-	if (texture.ambientOcclusion->TextureId > 0) program->Bind(texture.name + ".ambientOcclusion", texture.ambientOcclusion->Use2D());
-	if (texture.height->TextureId > 0) program->Bind(texture.name + ".height", texture.height->Use2D());
+	if (texture.albedo->TextureId > 0) renderProgram->Bind(texture.name + ".albedo", texture.albedo->Use2D());
+	if (texture.roughness->TextureId > 0) renderProgram->Bind(texture.name + ".roughness", texture.roughness->Use2D());
+	if (texture.metal->TextureId > 0) renderProgram->Bind(texture.name + ".metal", texture.metal->Use2D());
+	if (texture.normal->TextureId > 0) renderProgram->Bind(texture.name + ".normal", texture.normal->Use2D());
+	if (texture.ambientOcclusion->TextureId > 0) renderProgram->Bind(texture.name + ".ambientOcclusion", texture.ambientOcclusion->Use2D());
+	if (texture.height->TextureId > 0) renderProgram->Bind(texture.name + ".height", texture.height->Use2D());
 }
 
 void Scene::getUniformsFromSource() {
@@ -260,4 +306,12 @@ SceneUniform Scene::createUniform(std::string typeName, std::string name, float 
 	};
 
 	return s;
+}
+
+glm::vec2 Scene::getResolution() {
+	if (resolutionScale == 0) return glm::vec2(1920, 1080);
+	else if (resolutionScale == 1) return glm::vec2(1600, 900);
+	else if (resolutionScale == 2) return glm::vec2(1526, 864);
+	else if (resolutionScale == 3) return glm::vec2(1280, 720);
+	else if (resolutionScale == 4) return glm::vec2(640, 360);
 }

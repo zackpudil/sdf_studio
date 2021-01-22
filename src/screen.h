@@ -12,7 +12,4 @@ public:
 	void DrawCube();
 private:
 	GLuint ebo, vbo, vao;
-	GLuint fbo, rbo;
-
-	Texture *mainTexture;
 };
