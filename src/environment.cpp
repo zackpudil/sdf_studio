@@ -35,7 +35,8 @@ Environment::Environment() {
 }
 
 void Environment::SetHDRI(std::string filename) {
-	HdriTexture->LoadHDRIFromFile2D(filename);
+	HdriPath = filename;
+	HdriTexture->LoadHDRIFromFile2D(HdriPath);
 	cubeMap->AllocateCube(512, 512, true);
 	irradianceMap->AllocateCube(32, 32);
 	prefilterMap->AllocateCube(128, 128, true);

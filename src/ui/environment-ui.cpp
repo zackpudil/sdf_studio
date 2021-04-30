@@ -4,16 +4,13 @@
 #include <thread>
 #include <glm\gtc\type_ptr.hpp>
 
-EnvironmentUI::EnvironmentUI(Environment* e) : environment(e) {
-}
-
 void EnvironmentUI::Render() {
 	ImGui::Begin("Environment");
-	if (filePath.empty()) {
+	if (Environment->HdriPath.empty()) {
 		ImGui::Text("No File Selected");
 	}
 	else {
-		ImGui::Text(filePath.c_str());
+		ImGui::Text(Environment->HdriPath.c_str());
 	}
 
 	ImGui::SameLine();
@@ -21,21 +18,20 @@ void EnvironmentUI::Render() {
 		igfd::ImGuiFileDialog::Instance()->OpenModal("ChooseFileDlgKey2", "Choose a File", ".hdr", "");
 	}
 
-
 	if (igfd::ImGuiFileDialog::Instance()->FileDialog("ChooseFileDlgKey2", ImGuiWindowFlags_NoCollapse, ImVec2(800, 400), ImVec2(800, 400))) {
 		if (igfd::ImGuiFileDialog::Instance()->IsOk) {
 			filePath = igfd::ImGuiFileDialog::Instance()->GetFilePathName();
-			environment->SetHDRI(filePath);
+			Environment->SetHDRI(filePath);
 		}
 
 		igfd::ImGuiFileDialog::Instance()->CloseDialog("ChooseFileDlgKey2");
 	}
 
-	if (!filePath.empty()) {
-		ImGui::Image((void*)(intptr_t)environment->HdriTexture->TextureId, ImVec2(200, 100));
+	if (!Environment->HdriPath.empty()) {
+		ImGui::Image((void*)(intptr_t)Environment->HdriTexture->TextureId, ImVec2(200, 100));
 
 		if (ImGui::Button("Create IRR and PC maps")) {
-			environment->PreRender();
+			Environment->PreRender();
 		}
 	}
 
@@ -46,7 +42,7 @@ void EnvironmentUI::Render() {
 	
 	int id = 0;
 	int idToRemove = -1;
-	for (auto& light : *environment->GetLights()) {
+	for (auto& light : *Environment->GetLights()) {
 		auto idstr = std::to_string(id);
 		const char* currentItem = light.type == LightType::Pointlight ? types[1] : types[0];
 
@@ -88,10 +84,10 @@ void EnvironmentUI::Render() {
 		ImGui::Separator();
 	}
 
-	if (idToRemove >= 0) environment->RemoveLight(idToRemove);
+	if (idToRemove >= 0) Environment->RemoveLight(idToRemove);
 
 	if (ImGui::Button("Add Light")) {
-		environment->GetLights()->push_back(Light{
+		Environment->GetLights()->push_back(Light{
 			LightType::Sunlight,
 			glm::vec3(0.0f, 1.0f, 0.0),
 			glm::vec3(1.0f),

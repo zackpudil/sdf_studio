@@ -16,6 +16,9 @@
 #include <ui\stats-ui.h>
 
 #include "main.h"
+#include <project.h>
+#include <ImGuiFileDialog.h>
+#include <ui\project-ui.h>
 
 int main() {
 
@@ -59,28 +62,34 @@ int main() {
 	ImGui_ImplOpenGL3_Init("#version 330");
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 
-	Camera camera(glm::vec3(0, 0, 3), glm::vec3(0, 0, -1));
-	CameraUI cameraUI(&camera);
+	Project project;
 
-	Environment environment;
-	EnvironmentUI environmentUI(&environment);
+	project.NewScene();
 
-	Scene scene(&camera, &environment);
-	SceneUI sceneUI(&scene);
+	CameraUI cameraUI;
+	cameraUI.Camera = project.ProjectCamera;
+
+	SceneUI sceneUI;
+	sceneUI.Scene = project.ProjectScene;
+	sceneUI.UpdateText();
+
+	EnvironmentUI environmentUI;
+	environmentUI.Environment = project.ProjectEnvironment;
 
 	StatsUI statsUI;
+	ProjectUI projectUI(&project, &sceneUI, &environmentUI, &cameraUI);
 
 	while (!glfwWindowShouldClose(window)) {
-		if (camera.IsMoving || statsUI.KeepRunning) {
+		if (project.ProjectCamera->IsMoving || statsUI.KeepRunning) {
 			glfwPollEvents();
 		} else {
 			glfwWaitEvents();
 		}
 
-		camera.HandleInput(window);
+		project.ProjectCamera->HandleInput(window);
 		sceneUI.HandleInput(window);
 
-		scene.Render();
+		project.ProjectScene->Render();
 
 		glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		glViewport(0, 0, WIDTH, HEIGHT);
@@ -88,7 +97,7 @@ int main() {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glViewport(0, 0, WIDTH, HEIGHT);
 
-		scene.Display();
+		project.ProjectScene->Display();
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -98,6 +107,8 @@ int main() {
 		environmentUI.Render();
 		sceneUI.Render();
 		statsUI.Render();
+
+		projectUI.Render();
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

@@ -8,18 +8,22 @@
 
 class SceneUI {
 public:
-	SceneUI(Scene *);
+	SceneUI();
 
-	std::string sceneFilePath;
+	Scene* Scene;
 	void Render();
 	void HandleInput(GLFWwindow*);
+	void UpdateText();
 private:
-	Scene* scene;
-	TextEditor* editor;
 
+	TextEditor* editor;
 	bool hasBeenAlertedToError = false;
+	int resScale = 0;
+
+	void renderResolutionScaler();
+	void renderDebugConfig();
+	void renderSceneChooser();
 
 	void renderUniforms();
-	void renderSceneChooser();
-	void renderCodeAndMaterials();
+	void renderMaterials();
 };

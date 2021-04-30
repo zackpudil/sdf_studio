@@ -1,10 +1,8 @@
 #include <camera.h>
+#pragma once
 
 class CameraUI {
 public:
-	CameraUI(Camera*);
-
+	Camera* Camera;
 	void Render();
-private:
-	Camera* camera;
 };

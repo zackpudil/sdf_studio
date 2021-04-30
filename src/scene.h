@@ -24,17 +24,29 @@ struct SceneUniform {
 	float min;
 	float max;
 
-	int valuei[16];
+	int valuesi[16];
 	float valuesf[16];
 };
 
 struct SceneMaterial {
 	std::string name;
+
+	std::string albedoPath;
 	Texture* albedo;
+
+	std::string roughnessPath;
 	Texture* roughness;
+
+	std::string metalPath;
 	Texture* metal;
+
+	std::string normalPath;
 	Texture* normal;
+
+	std::string ambientOcclusionPath;
 	Texture* ambientOcclusion;
+
+	std::string heightPath;
 	Texture* height;
 };
 
@@ -55,13 +67,16 @@ public:
 	std::vector<SceneUniform>* GetUniforms();
 	std::vector<SceneMaterial>* GetMaterials();
 
-	void UpdateResolution(int resScale);
+	void UpdateResolution();
 
 	Texture* BrdfTexture;
+	std::string ShaderSource = "";
+
 	float DebugPlaneHeight = -10.0f;
 	bool UseDebugPlane = false;
 	float FudgeFactor = 1.0f;
 	float MaxDistance = 50.0f;
+	int ResolutionScale;
 	int MaxIterations = 300;
 	bool ShowRayAmount = false;
 	bool Pause = false;
@@ -86,12 +101,9 @@ private:
 	std::string librarySource;
 	std::string brdfSource;
 
-	std::string shaderSource;
-
 	GLuint fbo, rbo;
 
 	bool ready;
-	int resolutionScale;
 
 	void renderBrdf();
 

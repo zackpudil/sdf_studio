@@ -29,7 +29,8 @@ Scene::Scene(Camera *c, Environment *e) : camera(c), environment(e) {
 
 	ready = false;
 	renderBrdf();
-	UpdateResolution(0);
+	ResolutionScale = 0;
+	UpdateResolution();
 }
 
 void Scene::Render() {
@@ -73,10 +74,11 @@ void Scene::Display() {
 
 bool Scene::SetShader(std::string source) {
 	try {
+		// TODO: Remove the refresh of the realtime_renderer once it is finalized.
 		std::ifstream fragStream(std::string(PROJECT_SOURCE_DIR "/shaders/realtime_renderer.glsl"));
 		rendererSource = std::string(std::istreambuf_iterator<char>(fragStream), std::istreambuf_iterator<char>());
 
-		shaderSource = source;
+		ShaderSource = source;
 
 		getUniformsFromSource();
 		return true;
@@ -92,7 +94,7 @@ bool Scene::InitShader() {
 	try {
 		std::string code = rendererSource;
 		auto start_pos = code.find("<<HERE>>");
-		code.replace(start_pos, 8, shaderSource);
+		code.replace(start_pos, 8, ShaderSource);
 
 		start_pos = code.find("<<SDF_HELPERS>>");
 		code.replace(start_pos, 15, librarySource);
@@ -166,9 +168,7 @@ void Scene::renderBrdf() {
 
 }
 
-void Scene::UpdateResolution(int resolution) {
-	resolutionScale = resolution;
-
+void Scene::UpdateResolution() {
 	auto res = getResolution();
 	mainImage->Allocate2D(res.x, res.y, false);
 
@@ -193,7 +193,7 @@ void Scene::UpdateResolution(int resolution) {
 void Scene::bindUniform(SceneUniform uniform) {
 	switch (uniform.type) {
 	case UniformType::Int:
-		renderProgram->Bind(uniform.name, uniform.valuei[0]);
+		renderProgram->Bind(uniform.name, uniform.valuesi[0]);
 		break;
 	case UniformType::Float:
 		renderProgram->Bind(uniform.name, uniform.valuesf[0]);
@@ -224,7 +224,7 @@ void Scene::bindMaterial(SceneMaterial texture) {
 void Scene::getUniformsFromSource() {
 	
 	std::string line;
-	std::istringstream sourceStream(shaderSource);
+	std::istringstream sourceStream(ShaderSource);
 
 	std::vector<std::string> namesInSource;
 	while (std::getline(sourceStream, line)) {
@@ -233,8 +233,6 @@ void Scene::getUniformsFromSource() {
 			typeName[0] = '\0';
 			name[0] = '\0';
 			float min = -10.0, max = 10.0;
-			
-			std::istringstream lineS(line);
 
 			int res = sscanf(line.c_str(), "uniform %s %[^;]; // SceneUniform %f,%f", typeName, name, &min, &max);
 
@@ -309,9 +307,9 @@ SceneUniform Scene::createUniform(std::string typeName, std::string name, float 
 }
 
 glm::vec2 Scene::getResolution() {
-	if (resolutionScale == 0) return glm::vec2(1920, 1080);
-	else if (resolutionScale == 1) return glm::vec2(1600, 900);
-	else if (resolutionScale == 2) return glm::vec2(1526, 864);
-	else if (resolutionScale == 3) return glm::vec2(1280, 720);
-	else if (resolutionScale == 4) return glm::vec2(640, 360);
+	if (ResolutionScale == 0) return glm::vec2(1920, 1080);
+	else if (ResolutionScale == 1) return glm::vec2(1600, 900);
+	else if (ResolutionScale == 2) return glm::vec2(1526, 864);
+	else if (ResolutionScale == 3) return glm::vec2(1280, 720);
+	else if (ResolutionScale == 4) return glm::vec2(640, 360);
 }

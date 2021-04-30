@@ -120,7 +120,6 @@ float fbm(float x) {
 	return v;
 }
 
-
 float fbm(vec2 x) {
 	float v = 0.0;
 	float a = 0.5;
@@ -134,7 +133,6 @@ float fbm(vec2 x) {
 	}
 	return v;
 }
-
 
 float fbm(vec3 x) {
 	float v = 0.0;
@@ -152,7 +150,7 @@ float fbm(vec3 x) {
 
 <<SDF_HELPERS>>
 
-float de(vec3 p, out int mId);
+float de(vec3 p, out int mid);
 
 float sdfs_getGeometry(vec3 p, out int materialId) {
     return de(p, materialId);
@@ -353,7 +351,7 @@ Material applyPBRTexture(vec3 position, inout vec3 normal, PBRTexture pbr) {
     return Material(alb*alb, rough, met, occ, false);
 }
 
-Material getMaterial(vec3 position, inout vec3 normal, int mId);
+Material getMaterial(vec3 p, inout vec3 n, int mid);
 SubSurfaceMaterial getSubsurfaceMaterial(Material m, int mid);
 // ==================== END MATERIAL FUNCTIONS ==========================
 
@@ -402,13 +400,6 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
     int materialId;
     float geometry = sdfs_trace(rayOrigin, rayDirection, maxDistance, materialId);
 
-    if(showRayMarchAmount == 1) {
-        return mix(
-            vec3(0, 0, 1),
-            vec3(1, 0, 0),
-            float(SDFS_TRACE_AMOUNT)/float(maxIterations));
-    }
-
     if (useDebugPlane == 1) {
         float dt = INFINITY;
         if(rayDirection.y < 0) {
@@ -418,6 +409,13 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
         if(geometry > dt) {
             return distanceMeter(sdfs_getGeometry(rayOrigin + dt*rayDirection), dt, rayDirection, rayOrigin.y);
         }
+    }
+
+    if(showRayMarchAmount == 1) {
+        return mix(
+            vec3(0, 0, 1),
+            vec3(1, 0, 0),
+            float(SDFS_TRACE_AMOUNT)/float(maxIterations));
     }
 
     if(geometry < maxDistance) {

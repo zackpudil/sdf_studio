@@ -32,6 +32,7 @@ public:
 	std::vector<Light>* GetLights();
 
 	Texture* HdriTexture;
+	std::string HdriPath;
 private:
 	Texture* cubeMap;
 	Texture* irradianceMap;

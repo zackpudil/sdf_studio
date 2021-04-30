@@ -1,12 +1,12 @@
 #include <environment.h>
+#pragma once
 
 class EnvironmentUI {
 public:
-	EnvironmentUI(Environment*);
-
 	void Render();
+
+	Environment* Environment;
 private:
-	Environment* environment;
 	std::string filePath;
 
 	int newLightType;

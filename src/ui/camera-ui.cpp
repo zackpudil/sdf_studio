@@ -2,23 +2,21 @@
 #include <imgui.h>
 #include <string>
 
-CameraUI::CameraUI(Camera *c) : camera(c) { }
-
 void CameraUI::Render() {
 	ImGui::Begin("Camera");
 
-	ImGui::SliderFloat("FOV", &camera->Fov, 0.5, 2.0);
-	ImGui::SliderFloat("Speed", &camera->Speed, 1.0, 5.0);
-	ImGui::SliderFloat("Sensitivity", &camera->Sensitivity, 0.1, 1.0);
-	ImGui::SliderFloat("Exposure", &camera->Exposure, 0.1, 2.0);
+	ImGui::SliderFloat("FOV", &Camera->Fov, 0.5, 2.0);
+	ImGui::SliderFloat("Speed", &Camera->Speed, 1.0, 5.0);
+	ImGui::SliderFloat("Sensitivity", &Camera->Sensitivity, 0.1, 1.0);
+	ImGui::SliderFloat("Exposure", &Camera->Exposure, 0.1, 2.0);
 
 	if (ImGui::Button("Reset")) {
-		camera->Position = glm::vec3(0, 0, 3);
-		camera->Direction = glm::vec3(0, 0, -1);
+		Camera->Position = glm::vec3(0, 0, 3);
+		Camera->Direction = glm::vec3(0, 0, -1);
 	}
 
-	ImGui::Text(std::string(std::to_string(camera->Position.x) + "," + std::to_string(camera->Position.y) + "," + std::to_string(camera->Position.z)).c_str());
-	ImGui::Text(std::string(std::to_string(camera->Direction.x) + "," + std::to_string(camera->Direction.y) + "," + std::to_string(camera->Direction.z)).c_str());
+	ImGui::Text(std::string(std::to_string(Camera->Position.x) + "," + std::to_string(Camera->Position.y) + "," + std::to_string(Camera->Position.z)).c_str());
+	ImGui::Text(std::string(std::to_string(Camera->Direction.x) + "," + std::to_string(Camera->Direction.y) + "," + std::to_string(Camera->Direction.z)).c_str());
 
 	ImGui::End();
 }

@@ -9,105 +9,101 @@
 #include <fstream>
 #include <algorithm>
 
-SceneUI::SceneUI(Scene* scene) : scene(scene) {
-	sceneFilePath = "";
+SceneUI::SceneUI() {
 	editor = new TextEditor();
 	editor->SetLanguageDefinition(TextEditor::LanguageDefinition::GLSL());
 }
 
-void SceneUI::Render() {
-	ImGui::Begin("Scene");
+void SceneUI::HandleInput(GLFWwindow* window) {
+	auto isCTLKeyDown = [&](int key) {
+		return glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) && glfwGetKey(window, key);
+	};
 
-	static int resScale = 0;
+	auto isSHFTCTLKeyDown = [&](int key) {
+		return glfwGetKey(window, GLFW_KEY_LEFT_CONTROL)
+			&& glfwGetKey(window, GLFW_KEY_LEFT_SHIFT)
+			&& glfwGetKey(window, key);
+	};
+
+	if (glfwGetKey(window, GLFW_KEY_F5) || isCTLKeyDown(GLFW_KEY_R)) {
+		auto source = editor->GetText();
+		Scene->SetShader(source);
+		Scene->InitShader();
+		hasBeenAlertedToError = false;
+	}
+
+	if (isCTLKeyDown(GLFW_KEY_P)) Scene->Pause = true;
+	if (isSHFTCTLKeyDown(GLFW_KEY_P)) Scene->Pause = false;
+
+	for (int i = 0; i <= 4; i++) {
+		if (isCTLKeyDown(GLFW_KEY_0 + i)) {
+			resScale = i;
+			Scene->ResolutionScale = i;
+			Scene->UpdateResolution();
+		}
+	}
+}
+
+void SceneUI::Render() {
+	ImGui::Begin("Config");
+
+	renderResolutionScaler();
+	ImGui::Separator();
+
+	renderDebugConfig();
+	ImGui::Separator();
+
+	renderSceneChooser();
+
+	ImGui::End();
+
+	if (!Scene->ShaderSource.empty()) {
+		ImGui::Begin("GLSL");
+
+		renderMaterials();
+		ImGui::Separator();
+
+		renderUniforms();
+		ImGui::Separator();
+
+		editor->Render("Code");
+		ImGui::End();
+	}
+}
+
+void SceneUI::UpdateText() {
+	editor->SetText(Scene->ShaderSource);
+	resScale = Scene->ResolutionScale;
+}
+
+void SceneUI::renderResolutionScaler() {
 	if (ImGui::CollapsingHeader("Resolution")) {
 		ImGui::SliderInt("Resolution Scale", &resScale, 0, 4);
 		ImGui::SameLine();
 		if (ImGui::Button("Update")) {
-			scene->UpdateResolution(resScale);
+			Scene->ResolutionScale = resScale;
+			Scene->UpdateResolution();
 		}
-		ImGui::Checkbox("Pause", &scene->Pause);
+		ImGui::Checkbox("Pause", &Scene->Pause);
 	}
+}
 
+void SceneUI::renderDebugConfig() {
 	if (ImGui::CollapsingHeader("Debug")) {
-		ImGui::SliderFloat("Fudge Factor", &scene->FudgeFactor, 0.25f, 1.0f);
-		ImGui::SliderFloat("Max Distance", &scene->MaxDistance, 10.0f, 100.0f);
-		ImGui::SliderInt("Max Iterations", &scene->MaxIterations, 100, 500);
-		ImGui::Checkbox("Show Debug Plane", &scene->UseDebugPlane);
+		ImGui::SliderFloat("Fudge Factor", &Scene->FudgeFactor, 0.25f, 1.0f);
+		ImGui::SliderFloat("Max Distance", &Scene->MaxDistance, 10.0f, 100.0f);
+		ImGui::SliderInt("Max Iterations", &Scene->MaxIterations, 100, 500);
+		ImGui::Checkbox("Show Debug Plane", &Scene->UseDebugPlane);
 
-		if(scene->UseDebugPlane)
-			ImGui::SliderFloat("Debug Plane", &scene->DebugPlaneHeight, -10.0f, 10.0f);
+		if (Scene->UseDebugPlane)
+			ImGui::SliderFloat("Debug Plane", &Scene->DebugPlaneHeight, -10.0f, 10.0f);
 
-		ImGui::Checkbox("Show Raymarch Amount", &scene->ShowRayAmount);
-	}
-
-	ImGui::Separator();
-
-	renderUniforms();
-	ImGui::Separator();
-
-	renderSceneChooser();
-	ImGui::Separator();
-
-	ImGui::End();
-
-	if (!sceneFilePath.empty()) {
-		renderCodeAndMaterials();
-	}
-}
-
-void SceneUI::HandleInput(GLFWwindow *window) {
-	if (glfwGetKey(window, GLFW_KEY_F5)) {
-		auto source = editor->GetText();
-		scene->SetShader(source);
-		scene->InitShader();
-		hasBeenAlertedToError = false;
-	}
-}
-
-void SceneUI::renderUniforms() {
-	for (auto& v : *scene->GetUniforms()) {
-		auto name = v.name.c_str();
-		switch (v.type) {
-		case UniformType::Int:
-			if (ImGui::CollapsingHeader(name)) {
-				ImGui::InputInt(name, v.valuei);
-			}
-			break;
-		case UniformType::Float:
-			if (ImGui::CollapsingHeader(name)) {
-				ImGui::SliderFloat(std::string("Slide###slide" + v.name).c_str(), v.valuesf, v.min, v.max);
-				ImGui::InputFloat(std::string("Input###input" + v.name).c_str(), v.valuesf);
-			}
-			break;
-		case UniformType::Vector2:
-			if (ImGui::CollapsingHeader(name)) {
-				ImGui::SliderFloat2(std::string("Slide###slide" + v.name).c_str(), v.valuesf, v.min, v.max);
-				ImGui::InputFloat2(std::string("Input###input" + v.name).c_str(), v.valuesf);
-			}
-			break;
-		case UniformType::Vector3:
-			if (ImGui::CollapsingHeader(name)) {
-				ImGui::SliderFloat3(std::string("Slide###slide" + v.name).c_str(), v.valuesf, v.min, v.max);
-				ImGui::InputFloat3(std::string("Input###input" + v.name).c_str(), v.valuesf);
-			}
-			break;
-		case UniformType::Vector4:
-			if (ImGui::CollapsingHeader(name)) {
-				ImGui::SliderFloat4(std::string("Slide###slide" + v.name).c_str(), v.valuesf, v.min, v.max);
-				ImGui::InputFloat4(std::string("Input###input" + v.name).c_str(), v.valuesf);
-			}
-			break;
-		default:
-			ImGui::Text("Huh?");
-		}
-		ImGui::SameLine();
-
-		ImGui::Separator();
+		ImGui::Checkbox("Show Raymarch Amount", &Scene->ShowRayAmount);
 	}
 }
 
 void SceneUI::renderSceneChooser() {
-	if (sceneFilePath.empty()) {
+	/*if (sceneFilePath.empty()) {
 		ImGui::Text("No File Selected");
 	}
 	else {
@@ -123,8 +119,8 @@ void SceneUI::renderSceneChooser() {
 		std::ifstream shaderStream(sceneFilePath);
 		auto shaderSource = std::string(std::istreambuf_iterator<char>(shaderStream), std::istreambuf_iterator<char>());
 
-		scene->SetShader(shaderSource);
-		scene->InitShader();
+		Scene->SetShader(shaderSource);
+		Scene->InitShader();
 		hasBeenAlertedToError = false;
 	}
 
@@ -135,54 +131,102 @@ void SceneUI::renderSceneChooser() {
 			auto shaderSource = std::string(std::istreambuf_iterator<char>(shaderStream), std::istreambuf_iterator<char>());
 
 			editor->SetText(shaderSource);
-			scene->SetShader(shaderSource);
-			scene->InitShader();
+			Scene->SetShader(shaderSource);
+			Scene->InitShader();
 			hasBeenAlertedToError = false;
 		}
 
 		igfd::ImGuiFileDialog::Instance()->CloseDialog("ChooseFileDlgKey");
-	}
+	}*/
 
-	if (!scene->GetCompileError().empty() && !hasBeenAlertedToError) {
-		ImGui::OpenPopup("Compile/Link Error");
-	}
-
-	if (ImGui::BeginPopup("Compile/Link Error")) {
-		ImGui::TextColored(ImVec4(1, 0, 0, 1), scene->GetCompileError().c_str());
-
-		if (ImGui::Button("Close")) {
-			hasBeenAlertedToError = true;
-			ImGui::CloseCurrentPopup();
-		}
-
-		ImGui::EndPopup();
+	if (!Scene->GetCompileError().empty() && !hasBeenAlertedToError) {
+		ImGui::TextColored(ImVec4(1, 0, 0, 1), Scene->GetCompileError().c_str());
 	}
 }
 
-void SceneUI::renderCodeAndMaterials() {
-	ImGui::Begin("GLSL");
 
+
+void SceneUI::renderUniforms() {
+	if(ImGui::CollapsingHeader("Uniforms")) {
+		for (auto& v : *Scene->GetUniforms()) {
+			auto name = v.name.c_str();
+			switch (v.type) {
+			case UniformType::Int:
+				if (ImGui::TreeNode(name)) {
+					ImGui::InputInt(name, v.valuesi);
+					ImGui::TreePop();
+				}
+				break;
+			case UniformType::Float:
+				if (ImGui::TreeNode(name)) {
+					ImGui::SliderFloat(std::string("Slide###slide" + v.name).c_str(), v.valuesf, v.min, v.max);
+					ImGui::InputFloat(std::string("Input###input" + v.name).c_str(), v.valuesf);
+					ImGui::TreePop();
+				}
+				break;
+			case UniformType::Vector2:
+				if (ImGui::TreeNode(name)) {
+					ImGui::SliderFloat2(std::string("Slide###slide" + v.name).c_str(), v.valuesf, v.min, v.max);
+					ImGui::InputFloat2(std::string("Input###input" + v.name).c_str(), v.valuesf);
+					ImGui::TreePop();
+				}
+				break;
+			case UniformType::Vector3:
+				if (ImGui::TreeNode(name)) {
+					ImGui::SliderFloat3(std::string("Slide###slide" + v.name).c_str(), v.valuesf, v.min, v.max);
+					ImGui::InputFloat3(std::string("Input###input" + v.name).c_str(), v.valuesf);
+					ImGui::TreePop();
+				}
+				break;
+			case UniformType::Vector4:
+				if (ImGui::TreeNode(name)) {
+					ImGui::SliderFloat4(std::string("Slide###slide" + v.name).c_str(), v.valuesf, v.min, v.max);
+					ImGui::InputFloat4(std::string("Input###input" + v.name).c_str(), v.valuesf);
+					ImGui::TreePop();
+				}
+				break;
+			default:
+				ImGui::Text("Huh?");
+			}
+		}
+	}
+}
+
+void SceneUI::renderMaterials() {
+	
 	static char newMaterialName[25] = "";
 	if (ImGui::CollapsingHeader("Materials")) {
-		for (auto material : *scene->GetMaterials()) {
+		for (auto material : *Scene->GetMaterials()) {
 			if (ImGui::TreeNode(material.name.c_str())) {
+				
+				if (material.albedo->TextureId > 0) {
+					ImGui::Image((void*)(intptr_t)material.albedo->TextureId, ImVec2(50, 50));
+					ImGui::SameLine();
+				}
 
-				ImGui::Image((void*)(intptr_t)material.albedo->TextureId, ImVec2(50, 50));
-				ImGui::SameLine();
+				if (material.roughness->TextureId > 0) {
+					ImGui::Image((void*)(intptr_t)material.roughness->TextureId, ImVec2(50, 50));
+					ImGui::SameLine();
+				}
 
-				ImGui::Image((void*)(intptr_t)material.roughness->TextureId, ImVec2(50, 50));
-				ImGui::SameLine();
+				if (material.metal->TextureId > 0) {
+					ImGui::Image((void*)(intptr_t)material.metal->TextureId, ImVec2(50, 50));
+					ImGui::SameLine();
+				}
 
-				ImGui::Image((void*)(intptr_t)material.metal->TextureId, ImVec2(50, 50));
-				ImGui::SameLine();
+				if (material.normal->TextureId > 0) {
+					ImGui::Image((void*)(intptr_t)material.normal->TextureId, ImVec2(50, 50));
+					ImGui::SameLine();
+				}
 
-				ImGui::Image((void*)(intptr_t)material.normal->TextureId, ImVec2(50, 50));
-				ImGui::SameLine();
+				if (material.ambientOcclusion->TextureId > 0) {
+					ImGui::Image((void*)(intptr_t)material.ambientOcclusion->TextureId, ImVec2(50, 50));
+					ImGui::SameLine();
+				}
 
-				ImGui::Image((void*)(intptr_t)material.ambientOcclusion->TextureId, ImVec2(50, 50));
-				ImGui::SameLine();
-
-				ImGui::Image((void*)(intptr_t)material.height->TextureId, ImVec2(50, 50));
+				if (material.height->TextureId > 0) {
+					ImGui::Image((void*)(intptr_t)material.height->TextureId, ImVec2(50, 50));
+				}
 
 				ImGui::TreePop();
 			}
@@ -195,10 +239,7 @@ void SceneUI::renderCodeAndMaterials() {
 			}
 		}
 	}
-
-	editor->Render("Code");
-	ImGui::End();
-
+	
 	if (igfd::ImGuiFileDialog::Instance()->FileDialog("ChooseFileDlgKey3", ImGuiWindowFlags_NoCollapse, ImVec2(800, 400), ImVec2(800, 400))) {
 		if (igfd::ImGuiFileDialog::Instance()->IsOk) {
 			auto files = igfd::ImGuiFileDialog::Instance()->GetSelection();
@@ -212,22 +253,35 @@ void SceneUI::renderCodeAndMaterials() {
 			material.ambientOcclusion = new Texture();
 			material.height = new Texture();
 
-			auto isType = [](std::string name, std::string type) {
+			const auto isType = [](std::string name, std::string type) {
 				std::string lowerName = name;
 				std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
 				return lowerName.find(type) != std::string::npos;
 			};
 
 			for (auto const& file : files) {
-				if (isType(file.first, "_albedo")) material.albedo->LoadFromFile2D(file.second);
-				else if (isType(file.first, "_rough")) material.roughness->LoadFromFile2D(file.second);
-				else if (isType(file.first, "_metal")) material.metal->LoadFromFile2D(file.second);
-				else if (isType(file.first, "_normal")) material.normal->LoadFromFile2D(file.second);
-				else if (isType(file.first, "_ao"))  material.ambientOcclusion->LoadFromFile2D(file.second);
-				else if (isType(file.first, "_height")) material.height->LoadFromFile2D(file.second);
+				if (isType(file.first, "_albedo")) {
+					material.albedo->LoadFromFile2D(file.second);
+					material.albedoPath = file.second;
+				} else if (isType(file.first, "_rough")) {
+					material.roughness->LoadFromFile2D(file.second);
+					material.roughnessPath = file.second;
+				}  else if (isType(file.first, "_metal")) {
+					material.metal->LoadFromFile2D(file.second);
+					material.metalPath = file.second;
+				} else if (isType(file.first, "_normal")) {
+					material.normal->LoadFromFile2D(file.second);
+					material.normalPath = file.second;
+				} else if (isType(file.first, "_ao")) {
+					material.ambientOcclusion->LoadFromFile2D(file.second);
+					material.ambientOcclusionPath = file.second;
+				} else if (isType(file.first, "_height")) {
+					material.height->LoadFromFile2D(file.second);
+					material.heightPath = file.second;
+				}
 			}
 
-			scene->GetMaterials()->push_back(material);
+			Scene->GetMaterials()->push_back(material);
 			newMaterialName[0] = '\0';
 		}
 

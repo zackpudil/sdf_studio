@@ -38,6 +38,8 @@ void Texture::LoadHDRIFromFile2D(std::string file) {
 }
 
 void Texture::LoadFromFile2D(std::string file) {
+	if (file == "") return;
+
 	int width, height, nrComps;
 
 	unsigned char* data = stbi_load(file.c_str(), &width, &height, &nrComps, 0);
