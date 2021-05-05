@@ -9,23 +9,28 @@ Scene::Scene(Camera *c, Environment *e) : camera(c), environment(e) {
 	renderProgram = new Program();
 	displayProgram = new Program();
 
+	offlineRenderProgram = new Program();
+	offlineDisplayProgram = new Program();
+
 	screen = new Screen();
 	BrdfTexture = new Texture();
 	mainImage = new Texture();
+	offlineRender = new Texture();
 
 	screen->PrepareQuad();
 
-	std::ifstream vertStream(std::string(PROJECT_SOURCE_DIR "/shaders/quad_vert.glsl"));
-	vertSource = std::string(std::istreambuf_iterator<char>(vertStream), std::istreambuf_iterator<char>());
+	vertSource = getShaderSource("quad_vert");
+	rendererSource = getShaderSource("realtime_renderer");
+	offlineRenderSource = getShaderSource("offline_renderer");
+	brdfSource = getShaderSource("utils/precomputed_brdf");
 
-	std::ifstream fragStream(std::string(PROJECT_SOURCE_DIR "/shaders/realtime_renderer.glsl"));
-	rendererSource = std::string(std::istreambuf_iterator<char>(fragStream), std::istreambuf_iterator<char>());
-
-	std::ifstream hdfLibraryStream(std::string(PROJECT_SOURCE_DIR "/shaders/hg_sdf.glsl"));
-	librarySource = std::string(std::istreambuf_iterator<char>(hdfLibraryStream), std::istreambuf_iterator<char>());
-
-	std::ifstream brdfStream(std::string(PROJECT_SOURCE_DIR "/shaders/utils/precomputed_brdf.glsl"));
-	brdfSource = std::string(std::istreambuf_iterator<char>(brdfStream), std::istreambuf_iterator<char>());
+	librarySources = {
+		{ "<<NOISE>>", getShaderSource("library/noise") },
+		{ "<<SDF_HELPERS>>", getShaderSource("library/sdf") },
+		{ "<<RAY_TRACE>>", getShaderSource("library/ray_trace") },
+		{ "<<MATERIALS>>", getShaderSource("library/materials") },
+		{ "<<DEBUG>>", getShaderSource("library/debug") }
+	};
 
 	ready = false;
 	renderBrdf();
@@ -37,9 +42,8 @@ void Scene::Render() {
 	if (ready && !Pause) {
 		auto res = getResolution();
 		glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-		glBindRenderbuffer(GL_RENDERBUFFER, rbo);
 		glViewport(0, 0, res.x, res.y);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glClear(GL_DEPTH_BUFFER_BIT);
 
 		renderProgram->Activate()
 			.Bind("resolution", res)
@@ -57,17 +61,59 @@ void Scene::Render() {
 
 		environment->Use(renderProgram);
 
-		for (auto u : sceneUniforms) bindUniform(u);
-		for (auto t : sceneMaterials) bindMaterial(t);
+		for (auto u : sceneUniforms) bindUniform(u, renderProgram);
+		for (auto t : sceneMaterials) bindMaterial(t, renderProgram);
 	}
 
 
 	screen->DrawQuad();
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void Scene::Display() {
+void Scene::OfflineRender() {
+	if (ready && !Pause) {
+		auto res = getResolution();
+		glBindFramebuffer(GL_FRAMEBUFFER, offlineFbo);
+		glViewport(0, 0, res.x, res.y);
+		glClear(GL_DEPTH_BUFFER_BIT);
+
+		offlineRenderProgram->Activate()
+			.Bind("resolution", res)
+			.Bind("camera", camera->GetViewMatrix())
+			.Bind("eye", camera->Position)
+			.Bind("fov", camera->Fov)
+			.Bind("fudge", FudgeFactor)
+			.Bind("maxDistance", MaxDistance)
+			.Bind("maxIterations", MaxIterations)
+			.Bind("time", (float)glfwGetTime())
+			.Bind("dof", camera->DepthOfField)
+			.Bind("lastPass", offlineRender->Use2D());
+
+		environment->Use(offlineRenderProgram, true);
+
+		for (auto u : sceneUniforms) bindUniform(u, offlineRenderProgram);
+		for (auto t : sceneMaterials) bindMaterial(t, offlineRenderProgram);
+
+		screen->DrawQuad();
+	}
+}
+
+void Scene::Display(int width, int height) {
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, width, height);
+	glClear(GL_DEPTH_BUFFER_BIT);
+
 	displayProgram->Activate().Bind("mainImage", mainImage->Use2D());
+
+	screen->DrawQuad();
+}
+
+void Scene::OfflineDisplay(int width, int height) {
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glViewport(0, 0, width, height);
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	offlineDisplayProgram->Activate()
+		.Bind("lastPass", offlineRender->Use2D());
 
 	screen->DrawQuad();
 }
@@ -75,8 +121,8 @@ void Scene::Display() {
 bool Scene::SetShader(std::string source) {
 	try {
 		// TODO: Remove the refresh of the realtime_renderer once it is finalized.
-		std::ifstream fragStream(std::string(PROJECT_SOURCE_DIR "/shaders/realtime_renderer.glsl"));
-		rendererSource = std::string(std::istreambuf_iterator<char>(fragStream), std::istreambuf_iterator<char>());
+		rendererSource = getShaderSource("realtime_renderer");
+		offlineRenderSource = getShaderSource("offline_renderer");
 
 		ShaderSource = source;
 
@@ -92,19 +138,17 @@ bool Scene::SetShader(std::string source) {
 
 bool Scene::InitShader() {
 	try {
-		std::string code = rendererSource;
-		auto start_pos = code.find("<<HERE>>");
-		code.replace(start_pos, 8, ShaderSource);
-
-		start_pos = code.find("<<SDF_HELPERS>>");
-		code.replace(start_pos, 15, librarySource);
-
-		start_pos = code.find("<<TEXTURES>>");
-		code.replace(start_pos, 12, addMaterialsToCode());
+		std::string realTimeCode = updateSourceToCode(rendererSource);
+		std::string offlineCode = updateSourceToCode(offlineRenderSource);
 
 		renderProgram->Reload()
 			.Attach(vertSource, GL_VERTEX_SHADER)
-			.Attach(code, GL_FRAGMENT_SHADER)
+			.Attach(realTimeCode, GL_FRAGMENT_SHADER)
+			.Link();
+
+		offlineRenderProgram->Reload()
+			.Attach(vertSource, GL_VERTEX_SHADER)
+			.Attach(offlineCode, GL_FRAGMENT_SHADER)
 			.Link();
 		
 		compileError.clear();
@@ -139,6 +183,35 @@ std::string Scene::GetUniformErrors() {
 	return uniformErrors;
 }
 
+void Scene::UpdateResolution() {
+	OfflineRenderAmounts = 0;
+	auto res = getResolution();
+	mainImage->Allocate2D(res.x, res.y, false);
+	offlineRender->Allocate2D(res.x, res.y, false);
+
+	auto source = getShaderSource("image_frag");
+	displayProgram->Reload()
+		.Attach(vertSource, GL_VERTEX_SHADER)
+		.Attach(source, GL_FRAGMENT_SHADER)
+		.Link();
+
+	auto offlineDisplaySource = getShaderSource("offline_image");
+	offlineDisplayProgram->Reload()
+		.Attach(vertSource, GL_VERTEX_SHADER)
+		.Attach(offlineDisplaySource, GL_FRAGMENT_SHADER)
+		.Link();
+
+	glGenFramebuffers(1, &fbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mainImage->TextureId, 0);
+
+	glGenFramebuffers(1, &offlineFbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, offlineFbo);
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, offlineRender->TextureId, 0);
+
+}
+
+
 void Scene::renderBrdf() {
 	BrdfTexture->Allocate2D();
 
@@ -150,11 +223,8 @@ void Scene::renderBrdf() {
 
 
 	glGenFramebuffers(1, &fbo);
-	glGenRenderbuffers(1, &rbo);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, BrdfTexture->TextureId, 0);
 
 	glViewport(0, 0, 512, 512);
@@ -163,62 +233,39 @@ void Scene::renderBrdf() {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	glDeleteFramebuffers(1, &fbo);
-	glDeleteRenderbuffers(1, &rbo);
 	renderProgram->Reload();
 
 }
 
-void Scene::UpdateResolution() {
-	auto res = getResolution();
-	mainImage->Allocate2D(res.x, res.y, false);
-
-	std::ifstream sourceStream(std::string(PROJECT_SOURCE_DIR "/shaders/image_frag.glsl"));
-	auto source = std::string(std::istreambuf_iterator<char>(sourceStream), std::istreambuf_iterator<char>());
-
-	displayProgram->Reload()
-		.Attach(vertSource, GL_VERTEX_SHADER)
-		.Attach(source, GL_FRAGMENT_SHADER)
-		.Link();
-
-	glGenFramebuffers(1, &fbo);
-	glGenRenderbuffers(1, &rbo);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, res.x, res.y);
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mainImage->TextureId, 0);
-
-}
-
-void Scene::bindUniform(SceneUniform uniform) {
+void Scene::bindUniform(SceneUniform uniform, Program *program) {
 	switch (uniform.type) {
 	case UniformType::Int:
-		renderProgram->Bind(uniform.name, uniform.valuesi[0]);
+		program->Bind(uniform.name, uniform.valuesi[0]);
 		break;
 	case UniformType::Float:
-		renderProgram->Bind(uniform.name, uniform.valuesf[0]);
+		program->Bind(uniform.name, uniform.valuesf[0]);
 		break;
 	case UniformType::Vector2:
-		renderProgram->Bind(uniform.name, glm::vec2(uniform.valuesf[0], uniform.valuesf[1]));
+		program->Bind(uniform.name, glm::vec2(uniform.valuesf[0], uniform.valuesf[1]));
 		break;
 	case UniformType::Vector3:
-		renderProgram->Bind(uniform.name, glm::vec3(uniform.valuesf[0], uniform.valuesf[1], uniform.valuesf[2]));
+		program->Bind(uniform.name, glm::vec3(uniform.valuesf[0], uniform.valuesf[1], uniform.valuesf[2]));
 		break;
 	case UniformType::Vector4:
-		renderProgram->Bind(uniform.name, glm::vec4(uniform.valuesf[0], uniform.valuesf[1], uniform.valuesf[2], uniform.valuesf[3]));
+		program->Bind(uniform.name, glm::vec4(uniform.valuesf[0], uniform.valuesf[1], uniform.valuesf[2], uniform.valuesf[3]));
 		break;
 	default:
 		break;
 	}
 }
 
-void Scene::bindMaterial(SceneMaterial texture) {
-	if (texture.albedo->TextureId > 0) renderProgram->Bind(texture.name + ".albedo", texture.albedo->Use2D());
-	if (texture.roughness->TextureId > 0) renderProgram->Bind(texture.name + ".roughness", texture.roughness->Use2D());
-	if (texture.metal->TextureId > 0) renderProgram->Bind(texture.name + ".metal", texture.metal->Use2D());
-	if (texture.normal->TextureId > 0) renderProgram->Bind(texture.name + ".normal", texture.normal->Use2D());
-	if (texture.ambientOcclusion->TextureId > 0) renderProgram->Bind(texture.name + ".ambientOcclusion", texture.ambientOcclusion->Use2D());
-	if (texture.height->TextureId > 0) renderProgram->Bind(texture.name + ".height", texture.height->Use2D());
+void Scene::bindMaterial(SceneMaterial texture, Program *program) {
+	if (texture.albedo->TextureId > 0) program->Bind(texture.name + ".albedo", texture.albedo->Use2D());
+	if (texture.roughness->TextureId > 0) program->Bind(texture.name + ".roughness", texture.roughness->Use2D());
+	if (texture.metal->TextureId > 0) program->Bind(texture.name + ".metal", texture.metal->Use2D());
+	if (texture.normal->TextureId > 0) program->Bind(texture.name + ".normal", texture.normal->Use2D());
+	if (texture.ambientOcclusion->TextureId > 0) program->Bind(texture.name + ".ambientOcclusion", texture.ambientOcclusion->Use2D());
+	if (texture.height->TextureId > 0) program->Bind(texture.name + ".height", texture.height->Use2D());
 }
 
 void Scene::getUniformsFromSource() {
@@ -312,4 +359,27 @@ glm::vec2 Scene::getResolution() {
 	else if (ResolutionScale == 2) return glm::vec2(1526, 864);
 	else if (ResolutionScale == 3) return glm::vec2(1280, 720);
 	else if (ResolutionScale == 4) return glm::vec2(640, 360);
+}
+
+std::string Scene::getShaderSource(std::string shaderPath) {
+	std::ifstream fragStream(std::string(PROJECT_SOURCE_DIR "/shaders/" + shaderPath + ".glsl"));
+	return std::string(std::istreambuf_iterator<char>(fragStream), std::istreambuf_iterator<char>());
+}
+
+std::string Scene::updateSourceToCode(std::string code) {
+	std::string newCode = code;
+	auto start_pos = newCode.find("<<USER_CODE>>");
+	newCode.replace(start_pos, 13, ShaderSource);
+
+	start_pos = newCode.find("<<TEXTURES>>");
+	newCode.replace(start_pos, 12, addMaterialsToCode());
+
+	for (auto const& x : librarySources) {
+		auto libStartPos = newCode.find(x.first);
+		if (libStartPos != std::string::npos) {
+			newCode.replace(libStartPos, x.first.length(), x.second);
+		}
+	}
+
+	return newCode;
 }

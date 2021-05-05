@@ -3,6 +3,7 @@
 #include <camera.h>
 #include <screen.h>
 #include <environment.h>
+#include <map>
 
 #pragma once
 
@@ -59,7 +60,10 @@ public:
 
 	bool InitShader();
 	void Render();
-	void Display();
+	void OfflineRender();
+
+	void Display(int, int);
+	void OfflineDisplay(int, int);
 
 	std::string GetCompileError();
 	std::string GetUniformErrors();
@@ -80,15 +84,19 @@ public:
 	int MaxIterations = 300;
 	bool ShowRayAmount = false;
 	bool Pause = false;
+	int OfflineRenderAmounts = 0;
 private:
 	Program* renderProgram;
 	Program* displayProgram;
+	Program* offlineRenderProgram;
+	Program* offlineDisplayProgram;
 
 	Screen* screen;
 	Camera* camera;
 	Environment* environment;
 
 	Texture* mainImage;
+	Texture* offlineRender;
 	
 	std::vector<SceneUniform> sceneUniforms;
 	std::vector<SceneMaterial> sceneMaterials;
@@ -98,17 +106,19 @@ private:
 
 	std::string vertSource;
 	std::string rendererSource;
-	std::string librarySource;
+	std::string offlineRenderSource;
 	std::string brdfSource;
 
-	GLuint fbo, rbo;
+	std::map<std::string, std::string> librarySources;
+
+	GLuint fbo, offlineFbo;
 
 	bool ready;
 
 	void renderBrdf();
 
-	void bindUniform(SceneUniform);
-	void bindMaterial(SceneMaterial);
+	void bindUniform(SceneUniform, Program *);
+	void bindMaterial(SceneMaterial, Program *);
 
 	void getUniformsFromSource();
 	std::string addMaterialsToCode();
@@ -116,4 +126,8 @@ private:
 	SceneUniform createUniform(std::string, std::string, float, float);
 
 	glm::vec2 getResolution();
+
+	std::string getShaderSource(std::string);
+
+	std::string updateSourceToCode(std::string);
 };

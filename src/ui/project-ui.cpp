@@ -53,5 +53,7 @@ void ProjectUI::Render() {
 	if (!project->SavePath.empty()) {
 		ImGui::Text(project->SavePath.c_str());
 	}
+
+	ImGui::Checkbox("Offline", &Offline);
 	ImGui::End();
 }

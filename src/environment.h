@@ -26,7 +26,7 @@ public:
 
 	void SetHDRI(std::string);
 	void PreRender();
-	void Use(Program *);
+	void Use(Program *, bool offline = false);
 
 	void RemoveLight(int);
 	std::vector<Light>* GetLights();

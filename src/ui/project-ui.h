@@ -9,6 +9,8 @@ public:
 
 	void Render();
 
+	bool Offline = false;
+
 private:
 	Project* project;
 	SceneUI* sceneUI;

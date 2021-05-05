@@ -9,6 +9,7 @@ void CameraUI::Render() {
 	ImGui::SliderFloat("Speed", &Camera->Speed, 1.0, 5.0);
 	ImGui::SliderFloat("Sensitivity", &Camera->Sensitivity, 0.1, 1.0);
 	ImGui::SliderFloat("Exposure", &Camera->Exposure, 0.1, 2.0);
+	ImGui::SliderFloat("Depth of Field", &Camera->DepthOfField, 0.0, 1.0);
 
 	if (ImGui::Button("Reset")) {
 		Camera->Position = glm::vec3(0, 0, 3);

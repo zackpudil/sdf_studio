@@ -62,9 +62,12 @@ void Environment::PreRender() {
 	calcPrefilterCubeMap(captureProjection, captureViews);
 }
 
-void Environment::Use(Program *program) {
-	program->Bind("irr", irradianceMap->UseCube())
-		.Bind("prefilter", prefilterMap->UseCube())
+void Environment::Use(Program *program, bool offline) {
+	if (!offline) {
+		program->Bind("irr", irradianceMap->UseCube());		
+	}
+
+	program->Bind("prefilter", prefilterMap->UseCube())
 		.Bind("numberOfLights", (int)lights.size());
 
 
@@ -72,8 +75,10 @@ void Environment::Use(Program *program) {
 		program->Bind("lights[" + std::to_string(i) + "].type", (int)lights[i].type);
 		program->Bind("lights[" + std::to_string(i) + "].position", lights[i].position);
 		program->Bind("lights[" + std::to_string(i) + "].color", lights[i].color);
-		program->Bind("lights[" + std::to_string(i) + "].hasShadow", lights[i].hasShadow ? 1 : 0);
-		program->Bind("lights[" + std::to_string(i) + "].shadowPenumbra", lights[i].shadowPenumbra);
+		if (!offline) {
+			program->Bind("lights[" + std::to_string(i) + "].hasShadow", lights[i].hasShadow ? 1 : 0);
+			program->Bind("lights[" + std::to_string(i) + "].shadowPenumbra", lights[i].shadowPenumbra);
+		}
 	}
 }
 

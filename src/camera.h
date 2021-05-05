@@ -15,6 +15,7 @@ public:
 	float Sensitivity = 0.5f;
 	float Fov = 1.97f;
 	float Exposure = 0.5f;
+	float DepthOfField = 0.02;
 
 	void HandleInput(GLFWwindow*);
 	glm::mat3 GetViewMatrix();

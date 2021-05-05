@@ -80,7 +80,7 @@ int main() {
 	ProjectUI projectUI(&project, &sceneUI, &environmentUI, &cameraUI);
 
 	while (!glfwWindowShouldClose(window)) {
-		if (project.ProjectCamera->IsMoving || statsUI.KeepRunning) {
+		if (project.ProjectCamera->IsMoving || statsUI.KeepRunning || (projectUI.Offline && !project.ProjectScene->Pause)) {
 			glfwPollEvents();
 		} else {
 			glfwWaitEvents();
@@ -89,15 +89,14 @@ int main() {
 		project.ProjectCamera->HandleInput(window);
 		sceneUI.HandleInput(window);
 
-		project.ProjectScene->Render();
-
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		glViewport(0, 0, WIDTH, HEIGHT);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glViewport(0, 0, WIDTH, HEIGHT);
-
-		project.ProjectScene->Display();
+		if (projectUI.Offline) {
+			project.ProjectScene->OfflineRender();
+			project.ProjectScene->OfflineDisplay(WIDTH, HEIGHT);
+		}
+		else {
+			project.ProjectScene->Render();
+			project.ProjectScene->Display(WIDTH, HEIGHT);
+		}
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
