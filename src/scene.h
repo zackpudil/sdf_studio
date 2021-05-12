@@ -49,6 +49,10 @@ struct SceneMaterial {
 
 	std::string heightPath;
 	Texture* height;
+
+	bool operator==(SceneMaterial m) const {
+		return m.albedoPath == albedoPath;
+	}
 };
 
 class Scene {

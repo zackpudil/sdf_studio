@@ -229,6 +229,10 @@ void SceneUI::renderMaterials() {
 				}
 
 				ImGui::TreePop();
+				ImGui::SameLine();
+				if (ImGui::Button("Delete", ImVec2(100, 50))) {
+					Scene->GetMaterials()->erase(std::remove(Scene->GetMaterials()->begin(), Scene->GetMaterials()->end(), material));
+				}
 			}
 		}
 		ImGui::InputText("Name##material", newMaterialName, 25);

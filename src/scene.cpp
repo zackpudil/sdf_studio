@@ -128,6 +128,7 @@ bool Scene::SetShader(std::string source) {
 		offlineRenderSource = getShaderSource("offline_renderer");
 
 		ShaderSource = source;
+		UpdateResolution();
 
 		getUniformsFromSource();
 		return true;
