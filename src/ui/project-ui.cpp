@@ -55,5 +55,17 @@ void ProjectUI::Render() {
 	}
 
 	ImGui::Checkbox("Offline", &Offline);
+	ImGui::SameLine();
+	if (ImGui::Button("Save Render")) {
+		igfd::ImGuiFileDialog::Instance()->OpenModal("ChooseFileDlgKey6", "Open Files", ".png", "");
+	}
+
+	if (igfd::ImGuiFileDialog::Instance()->FileDialog("ChooseFileDlgKey6", ImGuiWindowFlags_NoCollapse, ImVec2(800, 400), ImVec2(800, 400))) {
+		if (igfd::ImGuiFileDialog::Instance()->IsOk) {
+			project->ProjectScene->SaveRender(igfd::ImGuiFileDialog::Instance()->GetFilePathName());
+		}
+
+		igfd::ImGuiFileDialog::Instance()->CloseDialog("ChooseFileDlgKey6");
+	}
 	ImGui::End();
 }

@@ -69,6 +69,8 @@ public:
 	void Display(int, int);
 	void OfflineDisplay(int, int);
 
+	void SaveRender(std::string);
+
 	std::string GetCompileError();
 	std::string GetUniformErrors();
 
@@ -115,7 +117,7 @@ private:
 
 	std::map<std::string, std::string> librarySources;
 
-	GLuint fbo, offlineFbo;
+	GLuint fbo, offlineFbo, renderFbo, renderRbo;
 
 	bool ready;
 

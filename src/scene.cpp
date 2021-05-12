@@ -5,6 +5,10 @@
 #include <sstream>
 #include <algorithm>
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+
+
 Scene::Scene(Camera *c, Environment *e) : camera(c), environment(e) {
 	renderProgram = new Program();
 	displayProgram = new Program();
@@ -213,6 +217,40 @@ void Scene::UpdateResolution() {
 	glBindFramebuffer(GL_FRAMEBUFFER, offlineFbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, offlineRender->TextureId, 0);
 
+	glGenFramebuffers(1, &renderFbo);
+	glBindFramebuffer(GL_FRAMEBUFFER, renderFbo);
+	glGenRenderbuffers(1, &renderRbo);
+	glBindRenderbuffer(GL_RENDERBUFFER, renderRbo);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, res.x, res.y);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
+	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderRbo);
+}
+
+void Scene::SaveRender(std::string path) {
+	auto size = getResolution();
+	int bufferSize = size.x * size.y * 4;
+	std::vector<char> buffer(bufferSize);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, renderFbo);
+
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	offlineDisplayProgram->Activate()
+		.Bind("lastPass", offlineRender->Use2D())
+		.Bind("exposure", camera->Exposure);
+
+	screen->DrawQuad();
+
+	glPixelStorei(GL_PACK_ALIGNMENT, 4);
+	glReadBuffer(GL_FRONT);
+
+
+	glReadPixels(0, 0, size.x, size.y, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+	stbi_flip_vertically_on_write(true);
+	stbi_write_png(path.c_str(), size.x, size.y, 4, buffer.data(), 4 * size.x);
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 
