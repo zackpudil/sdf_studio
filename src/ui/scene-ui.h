@@ -22,7 +22,7 @@ private:
 
 	void renderResolutionScaler();
 	void renderDebugConfig();
-	void renderSceneChooser();
+	void renderCompileErrors();
 
 	void renderUniforms();
 	void renderMaterials();

@@ -53,7 +53,7 @@ void SceneUI::Render() {
 	renderDebugConfig();
 	ImGui::Separator();
 
-	renderSceneChooser();
+	renderCompileErrors();
 
 	ImGui::End();
 
@@ -102,43 +102,7 @@ void SceneUI::renderDebugConfig() {
 	}
 }
 
-void SceneUI::renderSceneChooser() {
-	/*if (sceneFilePath.empty()) {
-		ImGui::Text("No File Selected");
-	}
-	else {
-		ImGui::Text(sceneFilePath.c_str());
-	}
-
-	ImGui::SameLine();
-	if (ImGui::SmallButton("Open File")) {
-		igfd::ImGuiFileDialog::Instance()->OpenModal("ChooseFileDlgKey", "Choose a File", ".glsl,.gl,.vert,.frag", "");
-	}
-	ImGui::SameLine();
-	if (ImGui::SmallButton("Reload")) {
-		std::ifstream shaderStream(sceneFilePath);
-		auto shaderSource = std::string(std::istreambuf_iterator<char>(shaderStream), std::istreambuf_iterator<char>());
-
-		Scene->SetShader(shaderSource);
-		Scene->InitShader();
-		hasBeenAlertedToError = false;
-	}
-
-	if (igfd::ImGuiFileDialog::Instance()->FileDialog("ChooseFileDlgKey", ImGuiWindowFlags_NoCollapse, ImVec2(800, 400), ImVec2(800, 400))) {
-		if (igfd::ImGuiFileDialog::Instance()->IsOk) {
-			sceneFilePath = igfd::ImGuiFileDialog::Instance()->GetFilePathName();
-			std::ifstream shaderStream(sceneFilePath);
-			auto shaderSource = std::string(std::istreambuf_iterator<char>(shaderStream), std::istreambuf_iterator<char>());
-
-			editor->SetText(shaderSource);
-			Scene->SetShader(shaderSource);
-			Scene->InitShader();
-			hasBeenAlertedToError = false;
-		}
-
-		igfd::ImGuiFileDialog::Instance()->CloseDialog("ChooseFileDlgKey");
-	}*/
-
+void SceneUI::renderCompileErrors() {
 	if (!Scene->GetCompileError().empty() && !hasBeenAlertedToError) {
 		ImGui::TextColored(ImVec4(1, 0, 0, 1), Scene->GetCompileError().c_str());
 	}

@@ -33,6 +33,10 @@ void EnvironmentUI::Render() {
 		if (ImGui::Button("Create IRR and PC maps")) {
 			Environment->PreRender();
 		}
+		ImGui::SameLine();
+		if (ImGui::Button("Remove")) {
+			Environment->SetHDRI("");
+		}
 	}
 
 	ImGui::Text("Lights");
