@@ -54,6 +54,8 @@ private:
 	std::string irradianceSource;
 	std::string prefilterSource;
 
+	bool hasEnvMap;
+
 	void convertHdriToCubeMap(glm::mat4, glm::mat4[6]);
 	void calcIrradianceCubeMap(glm::mat4, glm::mat4[6]);
 	void calcPrefilterCubeMap(glm::mat4, glm::mat4[6]);

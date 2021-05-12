@@ -52,7 +52,9 @@ uniform float fudge;
 uniform float maxDistance;
 uniform int maxIterations;
 
+uniform samplerCube irr;
 uniform samplerCube prefilter;
+uniform int hasEnvMap;
 
 uniform Light lights[10];
 uniform int numberOfLights;
@@ -74,8 +76,7 @@ float de(vec3 p, out int mid);
 
 <<MATERIALS>>
 
-<<USER_CODE>>
-
+<<LIGHTING>>
 
 // =================== LIGHT TRACING BRDF FUNCTIONS ========================
 float FresnelSchlickRoughness(float cosTheta, float F0, float roughness) {
@@ -97,14 +98,14 @@ vec3 cosWeightedRandomHemisphereDirection( const vec3 n, inout float seed ) {
     return normalize(rr);
 }
 
-vec3 modifyDirectionWithRoughness( const vec3 n, const float roughness, inout float seed ) {
+vec3 modifyDirectionWithRoughness( const vec3 n, const float roughness, inout float seed, float metal ) {
   	vec2 r = hash2(seed);
     
 	vec3  uu = normalize(cross(n, abs(n.y) > .5 ? vec3(1.,0.,0.) : vec3(0.,1.,0.)));
 	vec3  vv = cross(uu, n);
 	
-    float a = roughness*roughness;
-    a *= a; a *= a; // I want to have a really shiny watch.
+    float a = roughness*roughness*roughness*roughness*roughness;
+    
 	float rz = sqrt(abs((1.0-r.y) / clamp(1.+(a - 1.)*r.y,.00001,1.)));
 	float ra = sqrt(abs(1.-rz*rz));
 	float rx = ra*cos(6.2831*r.x); 
@@ -125,8 +126,7 @@ vec2 randomInUnitDisk(inout float seed) {
 #define PATH_LENGTH 5
 
 vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
-    vec3 col = vec3(1.0);
-
+    vec3 col = vec3(1);
     float lastRoughness = 1.0;
 
     for(int i = 0; i < PATH_LENGTH; i++) {
@@ -140,50 +140,52 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
             Material mat = getMaterial(pos, nor, mid);
             lastRoughness = mat.roughness;
 
-            // Calculate direct lighting.
-            vec3 incidentColor = vec3(0);
+            vec3 lightColor = vec3(1);
+
             for(int i = 0; i < 10; i++) {
-                if(i >= numberOfLights) break;
+                if (i >= numberOfLights) break;
 
-                vec3 lightDir = vec3(0);
+                vec3 lightDirection = lights[i].type == 0
+                    ? normalize(lights[i].position)
+                    : normalize(lights[i].position - pos);
 
-                if(lights[i].type == 0) {
-                    lightDir = normalize(lights[i].position);
+                float dif, sha;
+                float spePower = max(2.0/pow(mat.roughness, 4.0) - 2.0, 1.0);
+
+                if (mat.metal < 0.5) {
+                    dif = max(0.0, dot(lightDirection, nor));
+                    dif += pow(clamp(dot(lightDirection, reflect(rd, nor)), 0.0, 1.0), spePower);
+                    sha = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDirection, maxDistance));
                 } else {
-                    lightDir = normalize(lights[i].position - pos);
+                    dif = pow(clamp(dot(lightDirection, reflect(rd, nor)), 0.0, 1.0), spePower);
+                    sha  = 1.0;
                 }
 
-                float shadow = 1.0;
-                if(mat.metal < 0.5) {
-                    shadow = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDir, maxDistance));
-                }
-
-                incidentColor += lights[i].color*shadow*max(0, dot(lightDir, nor));
+                lightColor += dif*sha*lights[i].color;
             }
 
-            // calculate sky lighting based on environment map.
-            vec3 skyPoint = cosWeightedRandomHemisphereDirection(nor, seed);
-            vec3 skyColor = textureLod(prefilter, skyPoint, mat.roughness*4.0).rgb;
-            float skyShadow = step(INFINITY, sdfs_trace(pos+nor*0.005, skyPoint, maxDistance));
-
             ro = pos;
-            // set up ray to bounce from for next calculation.
             float F = FresnelSchlickRoughness(max(0.0, -dot(nor, rd)), 0.04, mat.roughness);
-            if (F > hash1(seed) - mat.metal) {
-                if (mat.metal > 0.5) {
-                    col *= mat.albedo*(incidentColor + skyColor);
+            // set up ray to bounce from for next calculation.
+            if (F  > hash1(seed) - mat.metal) {
+                if ( mat.metal > 0.5) {
+                    col *= max(mat.albedo, 0.04)*lightColor;
+                } else {
+                    col *= lightColor;
                 }
-                rd = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed);
+                rd = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed, mat.metal);
                 if (dot(rd, nor) <= 0.0) {
                     rd = cosWeightedRandomHemisphereDirection(nor, seed);
                 }
             } else {
-                col *= mat.albedo*(incidentColor + skyColor*skyShadow);
+                col *= mat.albedo*lightColor;
                 rd = cosWeightedRandomHemisphereDirection(nor, seed);
             }
         } else {
-            col *= textureLod(prefilter, rd, lastRoughness*4.0).rgb;
-            return 5.0*col;
+            if (hasEnvMap == 1) {
+                col *= 1.0 - exp(-1.0*textureLod(prefilter, rd, 4.0*lastRoughness).rgb);
+            }
+            return col;
         }
     }
 
@@ -198,11 +200,13 @@ mat3 setCamera( in vec3 ro, in vec3 ta ) {
     return mat3( cu, cv, cw );
 }
 
+<<USER_CODE>>
+
 void main() {
     vec2 fragCoord = gl_FragCoord.xy/resolution;
     vec2 uv = (2.0*gl_FragCoord.xy - resolution)/resolution.y;
 
-    float seed = float(baseHash(floatBitsToUint(uv)))/float(0xffffffffU) + time;
+    float seed = float(baseHash(floatBitsToUint(uv)))/float(0xffffffffU) + rand(time);
 
     uv += 2.0*hash2(seed)/resolution.y;
     vec3 rd = camera*normalize(vec3(uv, fov));
@@ -215,12 +219,15 @@ void main() {
 		out_fragColor = vec4(vec3(nfpd), 1);
         return;
     }
+
     vec3 fp = eye + rd*focusPlane;
     vec3 ro = eye + camera*vec3(randomInUnitDisk(seed), 0)*dof;
     rd = normalize(fp - ro);
 
     vec4 col = vec4(sdfs_pathtrace(ro, rd, seed), 1);
-    col += texture(lastPass, tex);
+
+    if(shouldReset == 0)
+        col += texture(lastPass, fragCoord);
     
     out_fragColor = col;
 }

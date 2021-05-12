@@ -5,6 +5,10 @@ uint baseHash(uvec2 p) {
     return h32^(h32 >> 16);
 }
 
+float hash(float seed) {
+    return fract(sin(seed)*43758.5453 );
+}
+
 float hash1(inout float seed) {
     uint n = baseHash(floatBitsToUint(vec2(seed+=.1,seed+=.1)));
     return float(n)/float(0xffffffffU);

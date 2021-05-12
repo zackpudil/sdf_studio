@@ -29,7 +29,8 @@ Scene::Scene(Camera *c, Environment *e) : camera(c), environment(e) {
 		{ "<<SDF_HELPERS>>", getShaderSource("library/sdf") },
 		{ "<<RAY_TRACE>>", getShaderSource("library/ray_trace") },
 		{ "<<MATERIALS>>", getShaderSource("library/materials") },
-		{ "<<DEBUG>>", getShaderSource("library/debug") }
+		{ "<<DEBUG>>", getShaderSource("library/debug") },
+		{ "<<LIGHTING>>", getShaderSource("library/pbr_lighting") }
 	};
 
 	ready = false;
@@ -86,7 +87,8 @@ void Scene::OfflineRender() {
 			.Bind("maxIterations", MaxIterations)
 			.Bind("time", (float)glfwGetTime())
 			.Bind("dof", camera->DepthOfField)
-			.Bind("lastPass", offlineRender->Use2D());
+			.Bind("lastPass", offlineRender->Use2D())
+			.Bind("shouldReset", camera->IsMoving ? 1 : 0);
 
 		environment->Use(offlineRenderProgram, true);
 
@@ -113,7 +115,8 @@ void Scene::OfflineDisplay(int width, int height) {
 	glClear(GL_DEPTH_BUFFER_BIT);
 
 	offlineDisplayProgram->Activate()
-		.Bind("lastPass", offlineRender->Use2D());
+		.Bind("lastPass", offlineRender->Use2D())
+		.Bind("exposure", camera->Exposure);
 
 	screen->DrawQuad();
 }

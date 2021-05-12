@@ -32,6 +32,7 @@ Environment::Environment() {
 
 	glGenFramebuffers(1, &fbo);
 	glGenRenderbuffers(1, &rbo);
+	hasEnvMap = false;
 }
 
 void Environment::SetHDRI(std::string filename) {
@@ -41,6 +42,7 @@ void Environment::SetHDRI(std::string filename) {
 	irradianceMap->AllocateCube(32, 32);
 	prefilterMap->AllocateCube(128, 128, true);
 	brdfTexture->Allocate2D();
+	hasEnvMap = false;
 }
 
 void Environment::PreRender() {
@@ -60,15 +62,17 @@ void Environment::PreRender() {
 	convertHdriToCubeMap(captureProjection, captureViews);
 	calcIrradianceCubeMap(captureProjection, captureViews);
 	calcPrefilterCubeMap(captureProjection, captureViews);
+	hasEnvMap = true;
 }
 
 void Environment::Use(Program *program, bool offline) {
-	if (!offline) {
-		program->Bind("irr", irradianceMap->UseCube());		
-	}
-
-	program->Bind("prefilter", prefilterMap->UseCube())
+	program->Bind("irr", irradianceMap->UseCube())
+		.Bind("prefilter", prefilterMap->UseCube())
 		.Bind("numberOfLights", (int)lights.size());
+
+	if (offline) {
+		program->Bind("hasEnvMap", hasEnvMap ? 1 : 0);
+	}
 
 
 	for(int i = 0; i < lights.size(); i++) {
