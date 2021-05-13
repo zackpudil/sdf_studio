@@ -149,19 +149,18 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
                     ? normalize(lights[i].position)
                     : normalize(lights[i].position - pos);
 
-                float dif, sha;
-                float spePower = max(2.0/pow(mat.roughness, 4.0) - 2.0, 1.0);
+                float sha = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDirection, maxDistance));
 
-                if (mat.metal < 0.5) {
-                    dif = max(0.0, dot(lightDirection, nor));
-                    dif += pow(clamp(dot(lightDirection, reflect(rd, nor)), 0.0, 1.0), spePower);
-                    sha = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDirection, maxDistance));
-                } else {
-                    dif = pow(clamp(dot(lightDirection, reflect(rd, nor)), 0.0, 1.0), spePower);
-                    sha  = 1.0;
-                }
+                vec3 dif =sdfs_getDirectLighting(
+                    nor,
+                    lightDirection,
+                    rd,
+                    mat,
+                    sha,
+                    lights[i].color
+                );
 
-                lightColor += dif*sha*lights[i].color;
+                lightColor += clamp(dif, 0 ,1);
             }
 
             ro = pos;
@@ -178,7 +177,7 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
                     rd = cosWeightedRandomHemisphereDirection(nor, seed);
                 }
             } else {
-                col *= mat.albedo*lightColor;
+                 col *= mat.albedo*lightColor;
                 rd = cosWeightedRandomHemisphereDirection(nor, seed);
             }
         } else {

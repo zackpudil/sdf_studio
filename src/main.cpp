@@ -104,7 +104,7 @@ int main() {
 
 		cameraUI.Render();
 		environmentUI.Render();
-		sceneUI.Render();
+		sceneUI.Render(!project.ProjectCamera->IsMoving);
 		statsUI.Render();
 
 		projectUI.Render();

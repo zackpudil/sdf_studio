@@ -11,7 +11,7 @@ public:
 	SceneUI();
 
 	Scene* Scene;
-	void Render();
+	void Render(bool);
 	void HandleInput(GLFWwindow*);
 	void UpdateText();
 private:

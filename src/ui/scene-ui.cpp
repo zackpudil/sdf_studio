@@ -44,7 +44,7 @@ void SceneUI::HandleInput(GLFWwindow* window) {
 	}
 }
 
-void SceneUI::Render() {
+void SceneUI::Render(bool editable) {
 	ImGui::Begin("Config");
 
 	renderResolutionScaler();
@@ -67,6 +67,7 @@ void SceneUI::Render() {
 		ImGui::Separator();
 
 		editor->Render("Code");
+		editor->SetReadOnly(!editable);
 		ImGui::End();
 	}
 }
