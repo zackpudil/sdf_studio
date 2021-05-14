@@ -15,7 +15,7 @@ void EnvironmentUI::Render() {
 
 	ImGui::SameLine();
 	if (ImGui::SmallButton("Open File###2")) {
-		igfd::ImGuiFileDialog::Instance()->OpenModal("ChooseFileDlgKey2", "Choose a File", ".hdr", "");
+		igfd::ImGuiFileDialog::Instance()->OpenModal("ChooseFileDlgKey2", "Choose a File", ".hdr,.png", "");
 	}
 
 	if (igfd::ImGuiFileDialog::Instance()->FileDialog("ChooseFileDlgKey2", ImGuiWindowFlags_NoCollapse, ImVec2(800, 400), ImVec2(800, 400))) {

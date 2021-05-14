@@ -20,6 +20,9 @@
 #include <ImGuiFileDialog.h>
 #include <ui\project-ui.h>
 
+
+void checkPressedAndReleased(GLFWwindow*, int, bool*, bool*);
+
 int main() {
 
 	if (!glfwInit()) {
@@ -79,12 +82,23 @@ int main() {
 	StatsUI statsUI;
 	ProjectUI projectUI(&project, &sceneUI, &environmentUI, &cameraUI);
 
+	bool showUI = true;
+
+	bool hidePressed = false;
+	bool renderPressed = false;
+	bool pausePressed = false;
+
 	while (!glfwWindowShouldClose(window)) {
 		if (project.ProjectCamera->IsMoving || statsUI.KeepRunning || (projectUI.Offline && !project.ProjectScene->Pause)) {
 			glfwPollEvents();
 		} else {
 			glfwWaitEvents();
 		}
+
+		checkPressedAndReleased(window, GLFW_KEY_F11, &hidePressed, &showUI);
+		checkPressedAndReleased(window, GLFW_KEY_F10, &renderPressed, &projectUI.Offline);
+		checkPressedAndReleased(window, GLFW_KEY_F9, &pausePressed, &(project.ProjectScene->Pause));
+
 
 		project.ProjectCamera->HandleInput(window);
 		sceneUI.HandleInput(window);
@@ -98,19 +112,21 @@ int main() {
 			project.ProjectScene->Display(WIDTH, HEIGHT);
 		}
 
-		ImGui_ImplOpenGL3_NewFrame();
-		ImGui_ImplGlfw_NewFrame();
-		ImGui::NewFrame();
+		if (showUI) {
+			ImGui_ImplOpenGL3_NewFrame();
+			ImGui_ImplGlfw_NewFrame();
+			ImGui::NewFrame();
 
-		cameraUI.Render();
-		environmentUI.Render();
-		sceneUI.Render(!project.ProjectCamera->IsMoving);
-		statsUI.Render();
+			cameraUI.Render();
+			environmentUI.Render();
+			sceneUI.Render(!project.ProjectCamera->IsMoving);
+			statsUI.Render();
 
-		projectUI.Render();
+			projectUI.Render();
 
-		ImGui::Render();
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+			ImGui::Render();
+			ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+		}
 
 		glfwSwapBuffers(window);
 	}
@@ -121,4 +137,15 @@ int main() {
 	glfwTerminate();
 
 	return 0;
+}
+
+void checkPressedAndReleased(GLFWwindow* window, int key, bool* pressed, bool* toggle) {
+	if(glfwGetKey(window, key) == GLFW_PRESS) {
+		*pressed = true;
+	}
+
+	if (glfwGetKey(window, key) == GLFW_RELEASE && *pressed) {
+		*toggle = !(*toggle);
+		*pressed = false;
+	}
 }

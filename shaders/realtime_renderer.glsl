@@ -84,7 +84,7 @@ float de(vec3 p, out int mid);
 
 // ==================== MAIN RENDER =====================================
 vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
-    vec3 pixelColor = texture(irr, rayDirection).rgb;
+    vec3 pixelColor = texture(prefilter, rayDirection).rgb;
 
     int materialId;
     float geometry = sdfs_trace(rayOrigin, rayDirection, maxDistance, materialId);

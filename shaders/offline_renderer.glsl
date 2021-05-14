@@ -127,13 +127,16 @@ vec2 randomInUnitDisk(inout float seed) {
 
 vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
     vec3 col = vec3(1);
-    float lastRoughness = 1.0;
+    float lastRoughness = 0.0;
+    bool isBackground = true;
 
     for(int i = 0; i < PATH_LENGTH; i++) {
         int mid = 0;
         float dist = sdfs_trace(ro, rd, maxDistance, mid);
 
         if(dist < maxDistance) {
+            isBackground = false;
+
             vec3 pos = ro + rd*dist;
             vec3 nor = sdfs_getNormal(pos);
 
@@ -151,16 +154,9 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
 
                 float sha = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDirection, maxDistance));
 
-                vec3 dif =sdfs_getDirectLighting(
-                    nor,
-                    lightDirection,
-                    rd,
-                    mat,
-                    sha,
-                    lights[i].color
-                );
-
-                lightColor += clamp(dif, 0 ,1);
+                lightColor += clamp(sdfs_getDirectLighting(
+                    nor, lightDirection, rd, mat, sha, lights[i].color
+                ), 0 ,1);
             }
 
             ro = pos;
@@ -170,7 +166,7 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
                 if ( mat.metal > 0.5) {
                     col *= max(mat.albedo, 0.04)*lightColor;
                 } else {
-                    col *= lightColor;
+                   col *= lightColor;
                 }
                 rd = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed, mat.metal);
                 if (dot(rd, nor) <= 0.0) {
@@ -182,7 +178,10 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
             }
         } else {
             if (hasEnvMap == 1) {
-                col *= 1.0 - exp(-1.0*textureLod(prefilter, rd, 4.0*lastRoughness).rgb);
+                //if (isBackground) return texture(prefilter, rd).rgb;
+                col *= textureLod(prefilter, rd, 4.0*lastRoughness).rgb;
+            } else {
+                if (isBackground) return vec3(0);
             }
             return col;
         }

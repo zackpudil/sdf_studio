@@ -221,18 +221,18 @@ void Scene::UpdateResolution() {
 	glBindFramebuffer(GL_FRAMEBUFFER, renderFbo);
 	glGenRenderbuffers(1, &renderRbo);
 	glBindRenderbuffer(GL_RENDERBUFFER, renderRbo);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, res.x, res.y);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, 1920, 1080);
 	glBindRenderbuffer(GL_RENDERBUFFER, 0);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderRbo);
 }
 
 void Scene::SaveRender(std::string path) {
 	auto size = getResolution();
-	int bufferSize = size.x * size.y * 4;
+	int bufferSize = 1920 * 1080 * 4;
 	std::vector<char> buffer(bufferSize);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, renderFbo);
-
+	glViewport(0, 0, 1920, 1080);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_DEPTH_BUFFER_BIT);
 
@@ -246,9 +246,9 @@ void Scene::SaveRender(std::string path) {
 	glReadBuffer(GL_FRONT);
 
 
-	glReadPixels(0, 0, size.x, size.y, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
+	glReadPixels(0, 0, 1920, 1080, GL_RGBA, GL_UNSIGNED_BYTE, buffer.data());
 	stbi_flip_vertically_on_write(true);
-	stbi_write_png(path.c_str(), size.x, size.y, 4, buffer.data(), 4 * size.x);
+	stbi_write_png(path.c_str(), 1920, 1080, 4, buffer.data(), 4 * 1920);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }

@@ -19,10 +19,11 @@ void Texture::LoadHDRIFromFile2D(std::string file) {
 	int width, height, nComps;
 	float* data = stbi_loadf(file.c_str(), &width, &height, &nComps, 0);
 
+	GLenum format = nComps == 1 ? GL_RED : nComps == 3 ? GL_RGB : GL_RGBA;
 	if (data) {
 		glGenTextures(1, &TextureId);
 		glBindTexture(GL_TEXTURE_2D, TextureId);
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data);
+		glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_FLOAT, data);
 
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);

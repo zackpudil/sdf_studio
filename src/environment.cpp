@@ -44,9 +44,9 @@ void Environment::SetHDRI(std::string filename) {
 		HdriPath = filename;
 		HdriTexture->LoadHDRIFromFile2D(HdriPath);
 	}
-	cubeMap->AllocateCube(512, 512, true);
-	irradianceMap->AllocateCube(32, 32);
-	prefilterMap->AllocateCube(128, 128, true);
+	cubeMap->AllocateCube(1024, 1024, true);
+	irradianceMap->AllocateCube(64, 64);
+	prefilterMap->AllocateCube(512, 512, true);
 	brdfTexture->Allocate2D();
 	hasEnvMap = false;
 }
@@ -112,10 +112,10 @@ void Environment::convertHdriToCubeMap(glm::mat4 captureProjection, glm::mat4 ca
 
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 1024, 1024);
 	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo);
 
-	glViewport(0, 0, 512, 512);
+	glViewport(0, 0, 1024, 1024);
 	
 	for (unsigned int i = 0; i < 6; i++) {
 		program->Bind("view", captureViews[i]);
@@ -142,8 +142,8 @@ void Environment::calcIrradianceCubeMap(glm::mat4 captureProjection, glm::mat4 c
 
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glBindRenderbuffer(GL_RENDERBUFFER, rbo);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 32, 32);
-	glViewport(0, 0, 32, 32);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 64, 64);
+	glViewport(0, 0, 64, 64);
 	
 	for (unsigned int i = 0; i < 6; i++) {
 		program->Bind("view", captureViews[i]);
@@ -169,8 +169,8 @@ void Environment::calcPrefilterCubeMap(glm::mat4 captureProjection, glm::mat4 ca
 
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	for (unsigned int mip = 0; mip < 5; ++mip) {
-		GLuint mipWidth = 128 * std::pow(0.5, mip);
-		GLuint mipHeight = 128 * std::pow(0.5, mip);
+		GLuint mipWidth = 512 * std::pow(0.5, mip);
+		GLuint mipHeight = 512 * std::pow(0.5, mip);
 
 		glBindRenderbuffer(GL_RENDERBUFFER, rbo);
 		glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
