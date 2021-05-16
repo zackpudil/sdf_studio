@@ -33,6 +33,7 @@ public:
 
 	Texture* HdriTexture;
 	std::string HdriPath;
+	float LightPathExposure = 1.0f;
 private:
 	Texture* cubeMap;
 	Texture* irradianceMap;

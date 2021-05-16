@@ -131,11 +131,12 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
             }
 
             float directLightShadow = 1.0;
+            float travelDistance = lights[i].type == 0 ? maxDistance : distance(lights[i].position, position);
             if(lights[i].hasShadow == 1) {
                 directLightShadow = sdfs_getSoftShadow(
                     position + normal*0.005,
                     lightDirection,
-                    0.01, 10.0,
+                    0.01, travelDistance,
                     lights[i].shadowPenumbra
                 );
             }

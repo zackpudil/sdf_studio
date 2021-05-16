@@ -55,6 +55,7 @@ uniform int maxIterations;
 uniform samplerCube irr;
 uniform samplerCube prefilter;
 uniform int hasEnvMap;
+uniform float envExp;
 
 uniform Light lights[10];
 uniform int numberOfLights;
@@ -126,24 +127,48 @@ vec2 randomInUnitDisk(inout float seed) {
 #define PATH_LENGTH 5
 
 vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
-    vec3 col = vec3(1);
-    float lastRoughness = 0.0;
+    vec3 col = vec3(0);
     bool isBackground = true;
+
+    Material firstMat;
 
     for(int i = 0; i < PATH_LENGTH; i++) {
         int mid = 0;
         float dist = sdfs_trace(ro, rd, maxDistance, mid);
 
         if(dist < maxDistance) {
-            isBackground = false;
-
             vec3 pos = ro + rd*dist;
             vec3 nor = sdfs_getNormal(pos);
-
             Material mat = getMaterial(pos, nor, mid);
-            lastRoughness = mat.roughness;
 
-            vec3 lightColor = vec3(1);
+            if (isBackground) {
+                firstMat = mat;
+            } else {
+                firstMat.albedo *= mat.albedo;
+            }
+
+            isBackground = false;
+
+            vec3 lightColor;
+            if (hasEnvMap == 1) {
+                float F = FresnelSchlickRoughness(max(0.0, -dot(nor, rd)), 0.04, mat.roughness);
+                vec3 lightDirection = normalize(F > hash1(seed) - mat.metal
+                    ? modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed, mat.metal)
+                    : cosWeightedRandomHemisphereDirection(nor, seed));
+
+                if (dot(lightDirection, nor) <= 0.0) {
+                    lightDirection = cosWeightedRandomHemisphereDirection(nor, seed);
+                }
+
+                lightColor = clamp(
+                    sdfs_getDirectLighting(
+                        nor, lightDirection, rd, mat, 1.0,
+                        1.0 - exp(-envExp*textureLod(prefilter, lightDirection, 4.0*mat.roughness).rgb)
+                    ),
+                    0, 1);
+            } else {
+                lightColor = vec3(0);
+            }
 
             for(int i = 0; i < 10; i++) {
                 if (i >= numberOfLights) break;
@@ -152,11 +177,19 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
                     ? normalize(lights[i].position)
                     : normalize(lights[i].position - pos);
 
-                float sha = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDirection, maxDistance));
+                float travelDistance = lights[i].type == 0 ? maxDistance : distance(lights[i].position, pos);
+
+                float sha = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDirection, travelDistance));
 
                 lightColor += clamp(sdfs_getDirectLighting(
                     nor, lightDirection, rd, mat, sha, lights[i].color
-                ), 0 ,1);
+                ), 0, 1);
+            }
+
+            if (numberOfLights > 0) {
+                int averageNumber = numberOfLights;
+                if (hasEnvMap == 1) averageNumber += 1;
+                lightColor /= float(averageNumber);
             }
 
             ro = pos;
@@ -164,22 +197,22 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
             // set up ray to bounce from for next calculation.
             if (F  > hash1(seed) - mat.metal) {
                 if ( mat.metal > 0.5) {
-                    col *= max(mat.albedo, 0.04)*lightColor;
+                    col += firstMat.albedo*lightColor;
                 } else {
-                   col *= lightColor;
+                   col += lightColor;
                 }
                 rd = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed, mat.metal);
                 if (dot(rd, nor) <= 0.0) {
                     rd = cosWeightedRandomHemisphereDirection(nor, seed);
                 }
             } else {
-                 col *= mat.albedo*lightColor;
+                col += firstMat.albedo*lightColor;
                 rd = cosWeightedRandomHemisphereDirection(nor, seed);
             }
         } else {
             if (hasEnvMap == 1) {
-                //if (isBackground) return texture(prefilter, rd).rgb;
-                col *= textureLod(prefilter, rd, 4.0*lastRoughness).rgb;
+                if (isBackground) return textureLod(prefilter, rd, 0).rgb;
+                col += firstMat.albedo*(1.0 - exp(-envExp*textureLod(prefilter, rd, 4.0*firstMat.roughness).rgb));
             } else {
                 if (isBackground) return vec3(0);
             }

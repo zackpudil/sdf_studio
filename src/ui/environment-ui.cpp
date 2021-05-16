@@ -39,6 +39,8 @@ void EnvironmentUI::Render() {
 		}
 	}
 
+	ImGui::SliderFloat("Env Exposure", &Environment->LightPathExposure, 1.0f, 100.0f);
+
 	ImGui::Text("Lights");
 	ImGui::Separator();
 

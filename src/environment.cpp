@@ -77,7 +77,8 @@ void Environment::Use(Program *program, bool offline) {
 		.Bind("numberOfLights", (int)lights.size());
 
 	if (offline) {
-		program->Bind("hasEnvMap", hasEnvMap ? 1 : 0);
+		program->Bind("hasEnvMap", hasEnvMap ? 1 : 0)
+			.Bind("envExp", LightPathExposure);
 	}
 
 
