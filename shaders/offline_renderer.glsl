@@ -160,9 +160,11 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
                     lightDirection = cosWeightedRandomHemisphereDirection(nor, seed);
                 }
 
+                float sha = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDirection, maxDistance));
+
                 lightColor = clamp(
                     sdfs_getDirectLighting(
-                        nor, lightDirection, rd, mat, 1.0,
+                        nor, lightDirection, rd, mat, sha,
                         1.0 - exp(-envExp*textureLod(prefilter, lightDirection, 4.0*mat.roughness).rgb)
                     ),
                     0, 1);
