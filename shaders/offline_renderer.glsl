@@ -227,7 +227,7 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
         } else {
             if (hasEnvMap == 1) {
                 if (isBackground) return textureLod(prefilter, rd, 0).rgb;
-                col += sig*(1.0 - exp(-500*textureLod(prefilter, rd, 0).rgb));
+                col += sig*(1.0 - exp(-envExp*textureLod(prefilter, rd, 0).rgb));
             }
             return col;
         }
