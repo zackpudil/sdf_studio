@@ -32,7 +32,15 @@ Material applyPBRTexture(vec3 position, inout vec3 normal, PBRTexture pbr) {
     vec3 nor = textureTriPlannar(pbr.normal, position, normal).rgb;
     normal = getNormalBump(position, normal, nor);
 
-    return Material(alb*alb, rough, met, occ, false);
+    return Material(alb*alb, rough, met, occ, false, false);
+}
+
+Material createHardMaterial(vec3 alb, float roughness, float metal) {
+    return Material(alb, roughness, metal, 1, false, false);
+}
+
+Material createEmissionMaterial(vec3 alb) {
+    return Material(alb, 0, 0, 0, false, true);
 }
 
 Material getMaterial(vec3 p, inout vec3 n, int mid);

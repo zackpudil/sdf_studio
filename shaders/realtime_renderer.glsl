@@ -32,6 +32,7 @@ struct Material {
     float ambientOcclusion;
 
     bool subsurface;
+    bool emmissive;
 };
 
 struct PBRTexture {
@@ -62,6 +63,7 @@ uniform int showRayMarchAmount;
 uniform samplerCube irr;
 uniform samplerCube prefilter;
 uniform sampler2D brdf;
+uniform int useIrr;
 
 uniform Light lights[10];
 uniform int numberOfLights;
@@ -84,7 +86,9 @@ float de(vec3 p, out int mid);
 
 // ==================== MAIN RENDER =====================================
 vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
-    vec3 pixelColor = texture(prefilter, rayDirection).rgb;
+    vec3 pixelColor = useIrr == 1
+        ? texture(irr, rayDirection).rgb
+        : textureLod(prefilter, rayDirection, 0).rgb;
 
     int materialId;
     float geometry = sdfs_trace(rayOrigin, rayDirection, maxDistance, materialId);
@@ -114,6 +118,10 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
         float ambientOcclusion = sdfs_getAmbientOcclusion(position, normal);
 
         Material material = getMaterial(position, normal, materialId);
+
+        if(material.emmissive) {
+            return material.albedo;
+        }
 
         vec3 reflectedRay = reflect(rayDirection, normal);
 

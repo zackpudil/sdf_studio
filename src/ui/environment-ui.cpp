@@ -37,9 +37,11 @@ void EnvironmentUI::Render() {
 		if (ImGui::Button("Remove")) {
 			Environment->SetHDRI("");
 		}
-	}
 
-	ImGui::SliderFloat("Env Exposure", &Environment->LightPathExposure, 1.0f, 100.0f);
+
+		ImGui::SliderFloat("Env Exposure", &Environment->LightPathExposure, 1.0f, 100.0f);
+		ImGui::Checkbox("Use Irradiance for Background", &Environment->UseIrradianceForBackground);
+	}
 
 	ImGui::Text("Lights");
 	ImGui::Separator();

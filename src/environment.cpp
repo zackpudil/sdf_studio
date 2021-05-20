@@ -74,7 +74,8 @@ void Environment::PreRender() {
 void Environment::Use(Program *program, bool offline) {
 	program->Bind("irr", irradianceMap->UseCube())
 		.Bind("prefilter", prefilterMap->UseCube())
-		.Bind("numberOfLights", (int)lights.size());
+		.Bind("numberOfLights", (int)lights.size())
+		.Bind("useIrr", UseIrradianceForBackground ? 1 : 0);
 
 	if (offline) {
 		program->Bind("hasEnvMap", hasEnvMap ? 1 : 0)

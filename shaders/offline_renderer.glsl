@@ -30,6 +30,7 @@ struct Material {
     float ambientOcclusion;
 
     bool subsurface;
+    bool emmissive;
 };
 
 struct PBRTexture {
@@ -56,6 +57,7 @@ uniform samplerCube irr;
 uniform samplerCube prefilter;
 uniform int hasEnvMap;
 uniform float envExp;
+uniform int useIrr;
 
 uniform Light lights[10];
 uniform int numberOfLights;
@@ -183,6 +185,12 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
             vec3 pos = ro + rd*dist;
             vec3 nor = sdfs_getNormal(pos);
             Material mat = getMaterial(pos, nor, mid);
+
+            if (mat.emmissive) {
+                col += sig*mat.albedo;
+                return col;
+            }
+
             vec3 f0 = mix(vec3(0.04), mat.albedo, mat.metal);
 
             for(int i = 0; i < numberOfLights; i++) {
@@ -226,7 +234,11 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
             }
         } else {
             if (hasEnvMap == 1) {
-                if (isBackground) return textureLod(prefilter, rd, 0).rgb;
+                if (isBackground) {
+                    return useIrr == 1
+                        ? texture(irr, rd).rgb
+                        : textureLod(prefilter, rd, 0).rgb;
+                }
                 col += sig*(1.0 - exp(-envExp*textureLod(prefilter, rd, 0).rgb));
             }
             return col;

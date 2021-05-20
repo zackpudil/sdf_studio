@@ -34,6 +34,7 @@ public:
 	Texture* HdriTexture;
 	std::string HdriPath;
 	float LightPathExposure = 1.0f;
+	bool UseIrradianceForBackground = false;
 private:
 	Texture* cubeMap;
 	Texture* irradianceMap;

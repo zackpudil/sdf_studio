@@ -31,10 +31,10 @@ float de(vec3 p, out int mid) {
 
 Material getMaterial(vec3 p, inout vec3 n, int mid) {
 	if(mid == 1) {
-		return Material(vec3(1.0, 0.3, 0.3), 0.3, 0, 1, false);
+		return createHardMaterial(vec3(1.0, 0.3, 0.3), 0.3, 0);
 	}
 
-	return Material(vec3(1), 0.4, 0, 1, false);
+	return createHardMaterial(vec3(1), 0.4, 0);
 }
 
 SubSurfaceMaterial getSubsurfaceMaterial(Material m, int mid) {
@@ -86,7 +86,7 @@ bool Project::SaveScene() {
 	fileData << "END UNIFORMS" << std::endl;
 
 	if (!ProjectEnvironment->HdriPath.empty()) {
-		fileData << ProjectEnvironment->HdriPath << std::endl;
+		fileData << ProjectEnvironment->HdriPath << " " << ProjectEnvironment->LightPathExposure << " " << ProjectEnvironment->UseIrradianceForBackground << std::endl;
 	}
 
 	fileData << "END ENV" << std::endl;
@@ -110,7 +110,8 @@ bool Project::SaveScene() {
 		<< ProjectCamera->Fov << " "
 		<< ProjectCamera->Exposure << " "
 		<< outGLM(ProjectCamera->Position) << " "
-		<< outGLM(ProjectCamera->Direction) << std::endl;
+		<< outGLM(ProjectCamera->Direction) << " "
+		<< ProjectCamera->DepthOfField << std::endl;
 
 	fileData << "END CAMERA";
 
@@ -258,7 +259,14 @@ void Project::LoadScene(std::string filePath) {
 				}
 				else
 				{
-					ProjectEnvironment->SetHDRI(line);
+					std::string path;
+					float exposure;
+					bool useIrr;
+
+					ss >> path >> exposure >> useIrr;
+					ProjectEnvironment->LightPathExposure = exposure;
+					ProjectEnvironment->UseIrradianceForBackground = useIrr;
+					ProjectEnvironment->SetHDRI(path);
 					ProjectEnvironment->PreRender();
 				}
 				
@@ -293,6 +301,7 @@ void Project::LoadScene(std::string filePath) {
 					ss >> ProjectCamera->Fov >> ProjectCamera->Exposure;
 					ProjectCamera->Position = inGLM();
 					ProjectCamera->Direction = inGLM();
+					ss >> ProjectCamera->DepthOfField;
 				}
 				break;
 			}

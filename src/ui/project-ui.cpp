@@ -54,7 +54,7 @@ void ProjectUI::Render() {
 		ImGui::Text(project->SavePath.c_str());
 	}
 
-	ImGui::Checkbox("Offline", &Offline);
+	ImGui::Checkbox("Path Trace", &Offline);
 	ImGui::SameLine();
 	if (ImGui::Button("Save Render")) {
 		igfd::ImGuiFileDialog::Instance()->OpenModal("ChooseFileDlgKey6", "Open Files", ".png", "");
