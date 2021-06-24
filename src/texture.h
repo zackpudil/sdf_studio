@@ -17,6 +17,8 @@ public:
 
 	void GenerateMipmap();
 
+	void DeleteTexture();
+
 	GLuint TextureId;
 	int TextureUnit;
 

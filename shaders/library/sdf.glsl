@@ -244,6 +244,14 @@ float fBox(vec2 p, vec2 b) {
 	return length(max(d, vec2(0))) + vmax(min(d, vec2(0)));
 }
 
+float fBoxFrame( vec3 p, vec3 b, float e ) {
+  p = abs(p) - b;
+  vec3 q = abs(p + e) - e;
+  return min(min(
+      length(max(vec3(p.x,q.y,q.z),0.0))+min(max(p.x,max(q.y,q.z)),0.0),
+      length(max(vec3(q.x,p.y,q.z),0.0))+min(max(q.x,max(p.y,q.z)),0.0)),
+      length(max(vec3(q.x,q.y,p.z),0.0))+min(max(q.x,max(q.y,p.z)),0.0));
+}
 
 // Endless "corner"
 float fCorner (vec2 p) {
@@ -317,6 +325,21 @@ float fHexagonCircumcircle(vec3 p, vec2 h) {
 // Hexagonal prism, incircle variant
 float fHexagonIncircle(vec3 p, vec2 h) {
 	return fHexagonCircumcircle(p, vec2(h.x*sqrt(3)*0.5, h.y));
+}
+
+float fCappedCylinder(vec3 p, float h, float r) {
+	vec2 d = abs(vec2(length(p.xz), p.y)) - vec2(h, r);
+	return min(max(d.x, d.y), 0.0) + length(max(d, 0.0));
+}
+
+float fCappedCone( vec3 p, float h, float r1, float r2 ) {
+	vec2 q = vec2( length(p.xz), p.y );
+	vec2 k1 = vec2(r2,h);
+	vec2 k2 = vec2(r2-r1,2.0*h);
+	vec2 ca = vec2(q.x-min(q.x,(q.y<0.0)?r1:r2), abs(q.y)-h);
+	vec2 cb = q - k1 + k2*clamp( dot(k1-q,k2)/dot(k2, k2), 0.0, 1.0 );
+	float s = (cb.x<0.0 && ca.y<0.0) ? -1.0 : 1.0;
+	return s*sqrt( min(dot(ca, ca),dot(cb, cb)) );
 }
 
 // Cone with correct distances to tip and base circle. Y is up, 0 is in the middle of the base.
@@ -588,6 +611,21 @@ float pModInterval(inout float p, float size, float start, float stop) {
 		c = start;
 	}
 	return c;
+}
+
+vec2 pModInterval(inout vec2 p, vec2 size, vec2 start, vec2 stop) {
+	float cx = pModInterval(p.x, size.x, start.x, stop.x);
+	float cy = pModInterval(p.y, size.y, start.y, stop.y);
+
+	return vec2(cx, cy);
+}
+
+vec3 pModInterval(inout vec3 p, vec3 size, vec3 start, vec3 stop) {
+	float cx = pModInterval(p.x, size.x, start.x, stop.x);
+	float cy = pModInterval(p.y, size.y, start.y, stop.y);
+	float cz = pModInterval(p.z, size.z, start.z, stop.z);
+	
+	return vec3(cx, cy, cz);
 }
 
 

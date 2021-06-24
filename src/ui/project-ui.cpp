@@ -67,5 +67,8 @@ void ProjectUI::Render() {
 
 		igfd::ImGuiFileDialog::Instance()->CloseDialog("ChooseFileDlgKey6");
 	}
+	if (Offline) {
+		ImGui::Text((std::to_string(project->ProjectScene->OfflineRenderAmounts) + std::string(" number of samples")).c_str());
+	}
 	ImGui::End();
 }

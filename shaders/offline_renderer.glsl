@@ -31,6 +31,9 @@ struct Material {
 
     bool subsurface;
     bool emmissive;
+
+    bool trasmit;
+    float transmitAmount;
 };
 
 struct PBRTexture {
@@ -111,15 +114,15 @@ vec3 modifyDirectionWithRoughness( const vec3 n, const float roughness, inout fl
     
 	float rz = sqrt(abs((1.0-r.y) / clamp(1.+(a - 1.)*r.y,.00001,1.)));
 	float ra = sqrt(abs(1.-rz*rz));
-	float rx = ra*cos(6.2831*r.x); 
-	float ry = ra*sin(6.2831*r.x);
+	float rx = ra*cos(2*PI*r.x); 
+	float ry = ra*sin(2*PI*r.x);
 	vec3  rr = vec3( rx*uu + ry*vv + rz*n );
     
     return normalize(rr);
 }
 
 vec2 randomInUnitDisk(inout float seed) {
-    vec2 h = hash2(seed) * vec2(1.,6.28318530718);
+    vec2 h = hash2(seed) * vec2(1.,2*PI);
     float phi = h.y;
     float r = sqrt(h.x);
 	return r*vec2(sin(phi),cos(phi));
@@ -152,7 +155,8 @@ vec3 specularCoverage(vec3 nor, vec3 rd, vec3 l, Material mat) {
     vec3 f0 = mix(vec3(0.04), mat.albedo, mat.metal);
     vec3 F = f0 + (1.0 - f0)*pow(max(1 - hov, 0), 5);
 
-    float a = mat.roughness*mat.roughness;
+    float r = max(0.001, mat.roughness);
+    float a = r*r;
     float a2 = a*a;
     float noh = max(dot(nor, h), 0.0);
     float noh2 = noh*noh;
@@ -169,14 +173,15 @@ vec3 specularCoverage(vec3 nor, vec3 rd, vec3 l, Material mat) {
 }
 
 // =================== END LIGHT TRACING BRDF FUNCTIONS ========================
-#define PATH_LENGTH 5
+// TODO: This should be a uniform.
+#define PATH_LENGTH 9
 
 vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
     vec3 sig = vec3(1);
     vec3 col = vec3(0);
     bool isBackground = true;
 
-    for(int i = 0; i < PATH_LENGTH; i++) {
+    for(int bounce = 0; bounce < PATH_LENGTH; bounce++) {
         int mid = 0;
         float dist = sdfs_trace(ro, rd, maxDistance, mid);
 
@@ -205,33 +210,68 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
                     ? maxDistance
                     : length(light.position - pos);
 
+                // determine how we handle this light, either specular or diffuse based coverage
                 float F = FresnelSchlickRoughness(max(0.0, -dot(nor, lightDirection)), 0.04, mat.roughness);
                 if (F > hash1(seed) - mat.metal) {
                     vec3 coverage = clamp(specularCoverage(nor, rd, lightDirection, mat), 0, 1);
-
-                    if (mat.metal > 0.5) {
-                        col += sig*coverage*light.color;
-                    } else {
-                        col += coverage*light.color;
-                    }
+                    col += sig*coverage*light.color;
                 } else {
                     vec3 coverage = diffuseCoverage(nor, rd, lightDirection, mat);
-                    float sha = step(INFINITY, sdfs_trace(pos+nor*0.005, lightDirection, lightDist));
+                    // we want the shadow for a glass to be proportional to n*(-l) * lightDirection,
+                    // so we check what the shadow ray hits to see if it's a glass (transmit) material
+                    vec3 sha;
+
+                    int hitId;
+                    float hitDist = sdfs_trace(pos+nor*0.01, lightDirection, lightDist, hitId);
+                    if (hitDist < lightDist) {
+                        vec3 hitPos = pos+nor*0.01 + lightDirection*hitDist;
+                        vec3 hitNor = sdfs_getNormal(hitPos);
+                        Material hitM = getMaterial(hitPos, hitNor, hitId);
+
+                        if (hitM.trasmit) {
+                            sha = clamp(dot(-lightDirection, hitNor) - pow(hitM.roughness, 4), 0, 1)*hitM.albedo;
+                        } else {
+                            sha = vec3(0.0);
+                        }
+                    } else {
+                        sha = vec3(1);
+                    }
                     col += sig*coverage*light.color*sha;
                 }
             }
 
             ro = pos;
-            float F = FresnelSchlickRoughness(max(0.0, -dot(nor, rd)), 0.04, mat.roughness);
-            if (F  > hash1(seed) - mat.metal) {
-                if (mat.metal > 0.5) {
-                    sig *= max(mat.albedo, vec3(0.04));
+            if (mat.trasmit) {
+                //sig *= mat.albedo*mat.ambientOcclusion;
+                float F = FresnelSchlickRoughness(max(0, dot(-nor, rd)), pow(mat.roughness, 4), 0);
+                vec3 wo;
+                if (F < hash1(seed)) {
+                    wo = modifyDirectionWithRoughness(refract(rd, nor, 1 / (1.0 + mat.transmitAmount)), pow(mat.roughness, 4), seed);
+                    ro += 2*max(0.01, abs(sdfs_getGeometry(ro + wo*0.01)))*wo;
+                    sig *= mat.albedo;
+                } else {
+                    wo = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed);
+                    sig *= clamp(specularCoverage(nor, rd, wo, mat), 0, 1);
                 }
-                rd = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed);
-            } else {
-                sig *= mat.albedo;
-                rd = cosWeightedRandomHemisphereDirection(nor, seed);
+                rd = wo;
+                continue;
             }
+
+            // if we have metal, do a random reflect in a cone proportional to it's roughness,
+            // the signal is also updated.
+            float F = FresnelSchlickRoughness(max(0.0, -dot(nor, rd)), 0.04, mat.roughness);
+            if (mat.metal >= hash1(seed) || F > hash1(seed)) {
+                vec3 wo = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed);
+                sig *= clamp(specularCoverage(nor, rd, wo, mat), 0, 1);
+                sig *= mix(vec3(1), mat.albedo, mat.metal);
+                rd = wo;
+                continue;
+            } 
+
+            // if we get here, that means we have a simple diffuse brdf to handle.
+            vec3 wo = cosWeightedRandomHemisphereDirection(nor, seed);
+            sig *= diffuseCoverage(nor, rd, wo, mat);
+            rd = wo;
         } else {
             if (hasEnvMap == 1) {
                 if (isBackground) {
@@ -245,7 +285,7 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
         }
     }
 
-    return vec3(0);
+    return col;
 }
 
 mat3 setCamera( in vec3 ro, in vec3 ta ) {

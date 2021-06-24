@@ -100,6 +100,7 @@ void Scene::OfflineRender() {
 		for (auto t : sceneMaterials) bindMaterial(t, offlineRenderProgram);
 
 		screen->DrawQuad();
+		OfflineRenderAmounts++;
 	}
 }
 
@@ -148,6 +149,7 @@ bool Scene::InitShader() {
 	try {
 		std::string realTimeCode = updateSourceToCode(rendererSource);
 		std::string offlineCode = updateSourceToCode(offlineRenderSource);
+		OfflineRenderAmounts = 0;
 
 		renderProgram->Reload()
 			.Attach(vertSource, GL_VERTEX_SHADER)
@@ -194,7 +196,11 @@ std::string Scene::GetUniformErrors() {
 void Scene::UpdateResolution() {
 	OfflineRenderAmounts = 0;
 	auto res = getResolution();
+
+	mainImage->DeleteTexture();
 	mainImage->Allocate2D(res.x, res.y, false);
+
+	offlineRender->DeleteTexture();
 	offlineRender->Allocate2D(res.x, res.y, false);
 
 	auto source = getShaderSource("image_frag");
@@ -209,16 +215,21 @@ void Scene::UpdateResolution() {
 		.Attach(offlineDisplaySource, GL_FRAGMENT_SHADER)
 		.Link();
 
+	glDeleteFramebuffers(1, &fbo);
 	glGenFramebuffers(1, &fbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, mainImage->TextureId, 0);
 
+	glDeleteFramebuffers(1, &offlineFbo);
 	glGenFramebuffers(1, &offlineFbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, offlineFbo);
 	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, offlineRender->TextureId, 0);
 
+	glDeleteFramebuffers(1, &renderFbo);
 	glGenFramebuffers(1, &renderFbo);
 	glBindFramebuffer(GL_FRAMEBUFFER, renderFbo);
+
+	glDeleteRenderbuffers(1, &renderRbo);
 	glGenRenderbuffers(1, &renderRbo);
 	glBindRenderbuffer(GL_RENDERBUFFER, renderRbo);
 	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA, 1920, 1080);

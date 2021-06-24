@@ -118,3 +118,7 @@ void Texture::GenerateMipmap() {
 	glBindTexture(GL_TEXTURE_CUBE_MAP, TextureId);
 	glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
 }
+
+void Texture::DeleteTexture() {
+	glDeleteTextures(1, &TextureId);
+}

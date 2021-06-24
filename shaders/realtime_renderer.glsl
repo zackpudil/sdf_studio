@@ -33,6 +33,9 @@ struct Material {
 
     bool subsurface;
     bool emmissive;
+
+    bool trasmit;
+    float transmitAmount;
 };
 
 struct PBRTexture {
@@ -123,7 +126,9 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
             return material.albedo;
         }
 
-        vec3 reflectedRay = reflect(rayDirection, normal);
+        vec3 reflectedRay = material.trasmit
+            ? refract(rayDirection, normal, 1/(1 + material.transmitAmount))
+            : reflect(rayDirection, normal);
 
         ambientOcclusion *= material.ambientOcclusion;
 

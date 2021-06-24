@@ -80,7 +80,6 @@ void SceneUI::UpdateText() {
 void SceneUI::renderResolutionScaler() {
 	if (ImGui::CollapsingHeader("Resolution")) {
 		ImGui::SliderInt("Resolution Scale", &resScale, 0, 4);
-		ImGui::SameLine();
 		if (ImGui::Button("Update")) {
 			Scene->ResolutionScale = resScale;
 			Scene->UpdateResolution();

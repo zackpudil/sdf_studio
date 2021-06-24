@@ -2,6 +2,7 @@
 #include <glad\glad.h>
 #include <glm\glm.hpp>
 #include <map>
+#include <vector>
 
 #pragma once
 
@@ -15,7 +16,6 @@ public:
 	Program& Link();
 	Program& Activate();
 
-
 	template <typename T> Program& Bind(std::string const& name, T&& value) {
 		int loc = glGetUniformLocation(program, name.c_str());
 		if (loc != -1)
@@ -28,6 +28,7 @@ public:
 
 private:
 	GLuint program;
+	std::vector<GLuint> shaders;
 
 	void bind(GLuint, int);
 	void bind(GLuint, float);

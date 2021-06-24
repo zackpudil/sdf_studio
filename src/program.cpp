@@ -11,6 +11,10 @@ Program::~Program() {
 Program& Program::Reload() {
 	glUseProgram(0);
 	glDeleteProgram(program);
+
+	for (GLuint shader : shaders) glDeleteShader(shader);
+	shaders.clear();
+	
 	program = glCreateProgram();
 
 	return *this;
@@ -38,6 +42,7 @@ Program& Program::Attach(std::string src, GLenum type) {
 		throw std::exception(errorLog.data());
 	}
 
+	shaders.push_back(shader);
 	glAttachShader(program, shader);
 
 	return *this;
