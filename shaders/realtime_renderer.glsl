@@ -87,104 +87,117 @@ float de(vec3 p, out int mid);
 
 <<LIGHTING>>
 
+#define PATH_LENGTH 9
+
 // ==================== MAIN RENDER =====================================
 vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
     vec3 pixelColor = useIrr == 1
         ? texture(irr, rayDirection).rgb
         : textureLod(prefilter, rayDirection, 0).rgb;
 
-    int materialId;
-    float geometry = sdfs_trace(rayOrigin, rayDirection, maxDistance, materialId);
+    vec3 transmitMask = vec3(1);
 
-    if (useDebugPlane == 1) {
-        float dt = INFINITY;
-        if(rayDirection.y < 0) {
-            dt = (rayOrigin.y - debugPlaneHeight)/-rayDirection.y;
-        }
+    for(int bounceIdx = 0; bounceIdx < PATH_LENGTH; bounceIdx++) {
+        int materialId;
+        float geometry = sdfs_trace(rayOrigin, rayDirection, maxDistance, materialId);
 
-        if(geometry > dt) {
-            return distanceMeter(sdfs_getGeometry(rayOrigin + dt*rayDirection), dt, rayDirection, rayOrigin.y);
-        }
-    }
-
-    if(showRayMarchAmount == 1) {
-        return mix(
-            vec3(0, 0, 1),
-            vec3(1, 0, 0),
-            float(SDFS_TRACE_AMOUNT)/float(maxIterations));
-    }
-
-    if(geometry < maxDistance) {
-        pixelColor = vec3(0);
-        vec3 position = rayOrigin + rayDirection*geometry;
-        vec3 normal = sdfs_getNormal(position);
-        float ambientOcclusion = sdfs_getAmbientOcclusion(position, normal);
-
-        Material material = getMaterial(position, normal, materialId);
-
-        if(material.emmissive) {
-            return material.albedo;
-        }
-
-        vec3 reflectedRay = material.trasmit
-            ? refract(rayDirection, normal, 1/(1 + material.transmitAmount))
-            : reflect(rayDirection, normal);
-
-        ambientOcclusion *= material.ambientOcclusion;
-
-        for(int i = 0; i < 10; i++) {
-            if(i >= numberOfLights) break;
-
-            vec3 lightDirection = vec3(0);
-
-            if(lights[i].type == 0)  {
-                lightDirection = normalize(lights[i].position);
-            } else {
-                lightDirection = normalize(lights[i].position - position);
+        if (useDebugPlane == 1) {
+            float dt = INFINITY;
+            if(rayDirection.y < 0) {
+                dt = (rayOrigin.y - debugPlaneHeight)/-rayDirection.y;
             }
 
-            float directLightShadow = 1.0;
-            float travelDistance = lights[i].type == 0 ? maxDistance : distance(lights[i].position, position);
-            if(lights[i].hasShadow == 1) {
-                directLightShadow = sdfs_getSoftShadow(
-                    position + normal*0.005,
+            if(geometry > dt) {
+                return distanceMeter(sdfs_getGeometry(rayOrigin + dt*rayDirection), dt, rayDirection, rayOrigin.y);
+            }
+        }
+
+        if(showRayMarchAmount == 1) {
+            return mix(
+                vec3(0, 0, 1),
+                vec3(1, 0, 0),
+                float(SDFS_TRACE_AMOUNT)/float(maxIterations));
+        }
+
+        if(geometry < maxDistance) {
+            pixelColor = vec3(0);
+            vec3 position = rayOrigin + rayDirection*geometry;
+            vec3 normal = sdfs_getNormal(position);
+            float ambientOcclusion = sdfs_getAmbientOcclusion(position, normal);
+
+            Material material = getMaterial(position, normal, materialId);
+
+            if(material.emmissive) {
+                return material.albedo;
+            }
+
+            vec3 reflectedRay = reflect(rayDirection, normal);
+
+            ambientOcclusion *= material.ambientOcclusion;
+
+            for(int i = 0; i < 10; i++) {
+                if(i >= numberOfLights) break;
+
+                vec3 lightDirection = vec3(0);
+
+                if(lights[i].type == 0)  {
+                    lightDirection = normalize(lights[i].position);
+                } else {
+                    lightDirection = normalize(lights[i].position - position);
+                }
+
+                float directLightShadow = 1.0;
+                float travelDistance = lights[i].type == 0 ? maxDistance : distance(lights[i].position, position);
+                if(lights[i].hasShadow == 1) {
+                    directLightShadow = sdfs_getSoftShadow(
+                        position + normal*0.005,
+                        lightDirection,
+                        0.01, travelDistance,
+                        lights[i].shadowPenumbra
+                    );
+                }
+
+                pixelColor += sdfs_getDirectLighting(
+                    normal,
                     lightDirection,
-                    0.01, travelDistance,
-                    lights[i].shadowPenumbra
-                );
+                    rayDirection,
+                    material,
+                    directLightShadow,
+                    lights[i].color
+                ) * (1.0 - float(bounceIdx)/float(PATH_LENGTH)) * transmitMask;
+
+                if(material.metal == 0 && material.subsurface) {
+                    SubSurfaceMaterial sssMate = getSubsurfaceMaterial(material, materialId);
+
+                    vec3 toEye = -rayDirection;
+                    vec3 sssLight = lightDirection + normal*sssMate.distortion;
+                    float sssDot = pow(sat(dot(toEye, -sssLight)), 0.1 + sssMate.power);
+
+                    float thickness = sdfs_getSubsurfaceScatter(position, normal, sssMate.depth);
+                    float sss = (sssDot + sssMate.ambient)*thickness;
+
+                    pixelColor += lights[i].color*sssMate.albedo*sss;
+                }
             }
 
-            pixelColor += sdfs_getDirectLighting(
+            pixelColor += sdfs_getIndirectLighting(
                 normal,
-                lightDirection,
                 rayDirection,
+                reflectedRay,
                 material,
-                directLightShadow,
-                lights[i].color
-            );
+                ambientOcclusion,
+                brdf
+            ) * (1.0 - float(bounceIdx)/float(PATH_LENGTH)) * transmitMask;
 
-            if(material.metal == 0 && material.subsurface) {
-                SubSurfaceMaterial sssMate = getSubsurfaceMaterial(material, materialId);
+            if (!material.trasmit)  return pixelColor;
+            transmitMask = material.albedo;
 
-                vec3 toEye = -rayDirection;
-                vec3 sssLight = lightDirection + normal*sssMate.distortion;
-                float sssDot = pow(sat(dot(toEye, -sssLight)), 0.1 + sssMate.power);
-
-                float thickness = sdfs_getSubsurfaceScatter(position, normal, sssMate.depth);
-                float sss = (sssDot + sssMate.ambient)*thickness;
-
-                pixelColor += lights[i].color*sssMate.albedo*sss;
-            }
+            rayDirection = refract(rayDirection, normal, 1/(1.0 + material.transmitAmount));
+            rayOrigin = position + 0.01*rayDirection;
+        } else {
+            return pixelColor;
         }
 
-        pixelColor += sdfs_getIndirectLighting(
-            normal,
-            rayDirection,
-            reflectedRay,
-            material,
-            ambientOcclusion,
-            brdf
-        );
     }
 
     return pixelColor;
