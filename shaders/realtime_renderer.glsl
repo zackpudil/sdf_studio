@@ -193,7 +193,7 @@ vec3 sdfs_render(vec3 rayOrigin, vec3 rayDirection) {
             transmitMask = material.albedo;
 
             rayDirection = refract(rayDirection, normal, 1/(1.0 + material.transmitAmount));
-            rayOrigin = position + 0.01*rayDirection;
+            rayOrigin = position + 0.02*rayDirection;
         } else {
             return pixelColor;
         }
