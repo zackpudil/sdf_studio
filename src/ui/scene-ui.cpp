@@ -160,6 +160,7 @@ void SceneUI::renderMaterials() {
 	
 	static char newMaterialName[25] = "";
 	if (ImGui::CollapsingHeader("Materials")) {
+		int i = 0;
 		for (auto material : *Scene->GetMaterials()) {
 			if (ImGui::TreeNode(material.name.c_str())) {
 				
@@ -194,9 +195,10 @@ void SceneUI::renderMaterials() {
 
 				ImGui::TreePop();
 				ImGui::SameLine();
-				if (ImGui::Button("Delete", ImVec2(100, 50))) {
+				if (ImGui::Button(std::string("Delete##" + std::to_string(i)).c_str(), ImVec2(100, 50))) {
 					Scene->GetMaterials()->erase(std::remove(Scene->GetMaterials()->begin(), Scene->GetMaterials()->end(), material));
 				}
+				i++;
 			}
 		}
 		ImGui::InputText("Name##material", newMaterialName, 25);
