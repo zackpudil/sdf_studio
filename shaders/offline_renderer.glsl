@@ -85,10 +85,6 @@ float de(vec3 p, out int mid);
 <<LIGHTING>>
 
 // =================== LIGHT TRACING BRDF FUNCTIONS ========================
-float FresnelSchlickRoughness(float cosTheta, float F0, float roughness) {
-    return F0 + (max((1. - roughness), F0) - F0) * pow(abs(1. - cosTheta), 5.0);
-}
-
 vec3 cosWeightedRandomHemisphereDirection( const vec3 n, inout float seed ) {
   	vec2 r = hash2(seed);
     
@@ -126,50 +122,6 @@ vec2 randomInUnitDisk(inout float seed) {
     float phi = h.y;
     float r = sqrt(h.x);
 	return r*vec2(sin(phi),cos(phi));
-}
-
-float ggx(float nov, float r) {
-    float k = pow(r + 1.0, 2.0)/8.0;
-    return nov/(nov*(1.0 - k) + k);
-}
-
-vec3 diffuseCoverage(vec3 nor, vec3 rd, vec3 l, Material mat) {
-    vec3 v = normalize(-rd);
-    vec3 h = normalize(v + l);
-    float hov = max(dot(h, v), 0);
-    float nol = max(dot(nor, l), 0);
-
-    vec3 f0 = mix(vec3(0.04), mat.albedo, mat.metal);
-    vec3 F = f0 + (1.0 - f0)*pow(max(1 - hov, 0), 5);
-
-    return (1.0 - F)*(1.0 - mat.metal)*mat.albedo*nol/PI;
-
-}
-
-vec3 specularCoverage(vec3 nor, vec3 rd, vec3 l, Material mat) {
-    vec3 v = normalize(-rd);
-    vec3 h = normalize(v + l);
-
-    float hov = max(dot(h, v), 0);
-
-    vec3 f0 = mix(vec3(0.04), mat.albedo, mat.metal);
-    vec3 F = f0 + (1.0 - f0)*pow(max(1 - hov, 0), 5);
-
-    float r = max(0.001, mat.roughness);
-    float a = r*r;
-    float a2 = a*a;
-    float noh = max(dot(nor, h), 0.0);
-    float noh2 = noh*noh;
-
-    float D = a2/(pow(noh2*(a2 - 1.0) + 1.0, 2.0)*PI);
-
-    float nov = max(dot(nor, v), 0);
-    float nol = max(dot(nor, l), 0);
-    
-    float G = ggx(nov, mat.roughness)*ggx(nol, mat.roughness);
-
-    float denom = 4.0*nov*nol;
-    return F*D*G*nol/max(denom, 0.001);
 }
 
 // =================== END LIGHT TRACING BRDF FUNCTIONS ========================
@@ -211,12 +163,12 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
                     : length(light.position - pos);
 
                 // determine how we handle this light, either specular or diffuse based coverage
-                float F = FresnelSchlickRoughness(max(0.0, -dot(nor, lightDirection)), 0.04, mat.roughness);
+                float F = sdfs_fresnelSchlickRoughness(max(0.0, -dot(nor, lightDirection)), 0.04, mat.roughness);
                 if (F > hash1(seed) - mat.metal) {
-                    vec3 coverage = clamp(specularCoverage(nor, rd, lightDirection, mat), 0, 1);
+                    vec3 coverage = clamp(sdfs_computeDirectSpecularLighting(nor, rd, lightDirection, mat), 0, 1);
                     col += sig*coverage*light.color;
                 } else {
-                    vec3 coverage = diffuseCoverage(nor, rd, lightDirection, mat);
+                    vec3 coverage = sdfs_computeDirectDiffuseLighting(nor, rd, lightDirection, mat);
                     // we want the shadow for a glass to be proportional to n*(-l) * lightDirection,
                     // so we check what the shadow ray hits to see if it's a glass (transmit) material
                     vec3 sha;
@@ -243,7 +195,7 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
             ro = pos;
             if (mat.trasmit) {
                 //sig *= mat.albedo*mat.ambientOcclusion;
-                float F = FresnelSchlickRoughness(max(0, dot(-nor, rd)), pow(mat.roughness, 4), 0);
+                float F = sdfs_fresnelSchlickRoughness(max(0, dot(-nor, rd)), pow(mat.roughness, 4), 0);
                 vec3 wo;
                 if (F < hash1(seed)) {
                     wo = modifyDirectionWithRoughness(refract(rd, nor, 1 / (1.0 + mat.transmitAmount)), pow(mat.roughness, 4), seed);
@@ -251,7 +203,7 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
                     sig *= mat.albedo;
                 } else {
                     wo = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed);
-                    sig *= clamp(specularCoverage(nor, rd, wo, mat), 0, 1);
+                    sig *= clamp(sdfs_computeDirectSpecularLighting(nor, rd, wo, mat), 0, 1);
                 }
                 rd = wo;
                 continue;
@@ -259,10 +211,10 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
 
             // if we have metal, do a random reflect in a cone proportional to it's roughness,
             // the signal is also updated.
-            float F = FresnelSchlickRoughness(max(0.0, -dot(nor, rd)), 0.04, mat.roughness);
+            float F = sdfs_fresnelSchlickRoughness(max(0.0, -dot(nor, rd)), 0.04, mat.roughness);
             if (mat.metal >= hash1(seed) || F > hash1(seed)) {
                 vec3 wo = modifyDirectionWithRoughness(reflect(rd, nor), mat.roughness, seed);
-                sig *= clamp(specularCoverage(nor, rd, wo, mat), 0, 1);
+                sig *= clamp(sdfs_computeDirectSpecularLighting(nor, rd, wo, mat), 0, 1);
                 sig *= mix(vec3(1), mat.albedo, mat.metal);
                 rd = wo;
                 continue;
@@ -270,7 +222,7 @@ vec3 sdfs_pathtrace(vec3 ro, vec3 rd, inout float seed) {
 
             // if we get here, that means we have a simple diffuse brdf to handle.
             vec3 wo = cosWeightedRandomHemisphereDirection(nor, seed);
-            sig *= diffuseCoverage(nor, rd, wo, mat);
+            sig *= sdfs_computeDirectDiffuseLighting(nor, rd, wo, mat);
             rd = wo;
         } else {
             if (hasEnvMap == 1) {
